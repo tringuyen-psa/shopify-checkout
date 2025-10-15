@@ -11,6 +11,8 @@ import { BillingCycle } from '@/types/package';
 import { PaymentMethod } from '@/types/purchase';
 import { formatCurrency, validateEmail, validateRequired } from '@/lib/utils';
 import { ArrowLeft, CreditCard, Shield, Truck, Check } from 'lucide-react';
+import { StripePaymentService } from '@/lib/stripe';
+import { PurchaseService } from '@/lib/purchase';
 
 const billingCycleOptions = [
   { value: BillingCycle.WEEKLY, label: 'Weekly' },
@@ -19,7 +21,8 @@ const billingCycleOptions = [
 ];
 
 const paymentMethodOptions = [
-  { value: PaymentMethod.STRIPE, label: 'Credit Card (Stripe)' },
+  { value: PaymentMethod.STRIPE_CARD, label: 'Credit Card (Stripe)' },
+  { value: PaymentMethod.STRIPE_POPUP, label: 'Stripe Checkout Popup' },
   { value: PaymentMethod.PAYPAL, label: 'PayPal' },
 ];
 
@@ -31,7 +34,7 @@ function CheckoutPage() {
   const { package: pkg, loading } = usePackage(packageId || '');
 
   const [selectedCycle, setSelectedCycle] = useState<BillingCycle>(billingCycle || BillingCycle.MONTHLY);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.STRIPE);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.STRIPE_CARD);
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Form state
@@ -150,7 +153,7 @@ function CheckoutPage() {
     setIsProcessing(true);
 
     try {
-      // Create purchase
+      // Step 1: Create purchase record first
       const purchaseData = {
         packageId: pkg.id,
         userId: formData.userId,
@@ -168,14 +171,81 @@ function CheckoutPage() {
       };
 
       console.log('Creating purchase:', purchaseData);
+      const purchase = await PurchaseService.createPurchase(purchaseData);
 
-      // Here we would integrate with the actual payment flow
-      // For now, just show a success message
-      alert(`Order placed successfully! You will be redirected to payment for ${formatCurrency(getPrice())}`);
+      // Step 2: Process payment based on selected method
+      const price = getPrice();
+      const baseUrl = window.location.origin;
+
+      if (paymentMethod === PaymentMethod.STRIPE_CARD) {
+        // Payment Intent flow for card collection
+        await StripePaymentService.loadStripeScript();
+
+        const paymentIntent = await StripePaymentService.createPaymentIntent({
+          amount: price,
+          currency: 'usd',
+          customerEmail: formData.customerEmail,
+        });
+
+        // Update purchase with payment intent metadata
+        await PurchaseService.completePurchase(purchase.id, paymentIntent.id);
+
+        // Load Stripe and show payment form
+        const stripe = (window as any).Stripe;
+        if (stripe) {
+          const stripeInstance = stripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
+          const result = await stripeInstance.confirmPayment({
+            clientSecret: paymentIntent.client_secret,
+            confirmParams: {
+              return_url: `${baseUrl}/payment/success?session_id=${paymentIntent.id}`,
+              payment_method_data: {
+                billing_details: {
+                  name: formData.customerName,
+                  email: formData.customerEmail,
+                  address: {
+                    line1: formData.address,
+                    city: formData.city,
+                    country: formData.country,
+                    postal_code: formData.zipCode,
+                  },
+                },
+              },
+            },
+          });
+
+          if (result.error) {
+            throw new Error(result.error.message);
+          }
+        } else {
+          throw new Error('Stripe could not be loaded');
+        }
+
+      } else if (paymentMethod === PaymentMethod.STRIPE_POPUP) {
+        // Checkout Session flow for popup
+        const checkoutSession = await StripePaymentService.createCheckoutSession({
+          packageName: pkg.name,
+          price: price,
+          customerEmail: formData.customerEmail,
+          successUrl: `${baseUrl}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
+          cancelUrl: `${baseUrl}/payment/cancel`,
+        });
+
+        // Update purchase with session metadata (webhook will handle final update)
+        await PurchaseService.completePurchase(purchase.id, checkoutSession.sessionId);
+
+        // Redirect to Stripe Checkout
+        window.location.href = checkoutSession.checkoutUrl;
+
+      } else {
+        // PayPal flow (placeholder)
+        alert(`PayPal payment for ${formatCurrency(price)} - Coming soon!`);
+        setIsProcessing(false);
+        return;
+      }
 
     } catch (error) {
-      console.error('Error creating purchase:', error);
-      alert('Failed to create order. Please try again.');
+      console.error('Payment processing error:', error);
+      alert(`Payment failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsProcessing(false);
     }
@@ -377,14 +447,26 @@ function CheckoutPage() {
                       label="Select Payment Method"
                     />
 
-                    {paymentMethod === PaymentMethod.STRIPE && (
+                    {paymentMethod === PaymentMethod.STRIPE_CARD && (
                       <div className="bg-gray-50 p-4 rounded-lg">
                         <p className="text-sm text-gray-600 mb-2">
-                          You will be redirected to Stripe's secure payment page to complete your purchase.
+                          Enter your credit card details on Stripe's secure payment form.
                         </p>
                         <div className="flex items-center space-x-2">
                           <Shield className="h-4 w-4 text-green-600" />
-                          <span className="text-xs text-green-600">Secured by Stripe</span>
+                          <span className="text-xs text-green-600">Secured by Stripe Card Payments</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {paymentMethod === PaymentMethod.STRIPE_POPUP && (
+                      <div className="bg-gray-50 p-4 rounded-lg">
+                        <p className="text-sm text-gray-600 mb-2">
+                          You will be redirected to Stripe's secure checkout popup to complete your purchase.
+                        </p>
+                        <div className="flex items-center space-x-2">
+                          <Shield className="h-4 w-4 text-blue-600" />
+                          <span className="text-xs text-blue-600">Secured by Stripe Checkout</span>
                         </div>
                       </div>
                     )}

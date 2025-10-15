@@ -20,8 +20,10 @@ export enum PurchaseStatus {
 }
 
 export enum PaymentMethod {
-  STRIPE = "stripe",
+  STRIPE_CARD = "stripe_card",
+  STRIPE_POPUP = "stripe_popup",
   PAYPAL = "paypal",
+  STRIPE = "stripe", // Legacy support
 }
 
 @Entity("purchases")

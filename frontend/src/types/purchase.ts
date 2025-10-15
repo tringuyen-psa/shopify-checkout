@@ -1,16 +1,17 @@
-import { Package } from './package';
+import { Package } from "./package";
 
 export enum PurchaseStatus {
-  PENDING = 'pending',
-  COMPLETED = 'completed',
-  CANCELLED = 'cancelled',
-  EXPIRED = 'expired',
-  REFUNDED = 'refunded',
+  PENDING = "pending",
+  COMPLETED = "completed",
+  CANCELLED = "cancelled",
+  EXPIRED = "expired",
+  REFUNDED = "refunded",
 }
 
 export enum PaymentMethod {
-  STRIPE = 'stripe',
-  PAYPAL = 'paypal',
+  STRIPE_CARD = "stripe_card",
+  PAYPAL = "paypal",
+  STRIPE_POPUP = "stripe_popup",
 }
 
 export interface Purchase {
