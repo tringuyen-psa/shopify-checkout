@@ -305,24 +305,128 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
         />
 
         {paymentMethod === PaymentMethod.STRIPE_CARD && (
-          <div className="bg-gray-50 p-4 rounded-lg space-y-4">
-            <div className="flex items-center space-x-2">
-              <Shield className="h-4 w-4 text-green-600" />
-              <span className="text-xs text-green-600">Secured by Stripe Card Payments</span>
-            </div>
+          <div className="mt-6">
+            {/* Credit Card Form Section */}
+            <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+              {/* Credit Card Header */}
+              <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <CreditCard className="h-6 w-6 text-white" />
+                    <h4 className="text-white font-semibold text-lg">Credit Card Information</h4>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Shield className="h-4 w-4 text-green-300" />
+                    <span className="text-xs text-green-300">Secured by Stripe</span>
+                  </div>
+                </div>
+              </div>
 
-            {/* Stripe Card Element */}
-            <div className="bg-white p-4 border border-gray-300 rounded-lg">
-              <CardElement options={cardElementOptions} />
-            </div>
+              {/* Credit Card Form Content */}
+              <div className="p-6 space-y-6">
+                {/* Card Number Section */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">Card Number</label>
+                  <div className="bg-white border border-gray-300 rounded-lg p-4 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-200">
+                    <CardElement options={cardElementOptions} />
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-gray-500">
+                    <div className="flex items-center space-x-4">
+                      <span>Support:</span>
+                      <div className="flex items-center space-x-2">
+                        <div className="w-8 h-5 bg-blue-600 rounded"></div>
+                        <span>Visa</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <div className="w-8 h-5 bg-red-500 rounded"></div>
+                        <span>Mastercard</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <div className="w-8 h-5 bg-blue-700 rounded"></div>
+                        <span>Amex</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <div className="w-8 h-5 bg-green-600 rounded"></div>
+                        <span>JCB</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
 
-            <p className="text-sm text-gray-600">
-              Secure, fast checkout with Link
-              While entering card information, you'll be automatically advanced to the next form field when the current field is complete.
-            </p>
+                {/* Security Information */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-start space-x-3">
+                    <Shield className="h-5 w-5 text-blue-600 mt-0.5" />
+                    <div className="flex-1">
+                      <h5 className="font-medium text-blue-900 mb-1">Secure, fast checkout</h5>
+                      <p className="text-sm text-blue-700">
+                        While entering card information, you'll be automatically advanced to the next form field when the current field is complete.
+                      </p>
+                      <p className="text-xs text-blue-600 mt-2">
+                        Your payment information is encrypted and secure. We never store your card details.
+                      </p>
+                    </div>
+                  </div>
+                </div>
 
-            <div className="text-xs text-gray-500 space-y-1">
-              <p>Supported cards include Visa, Mastercard, American Express, and JCB.</p>
+                {/* Billing Details Summary */}
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <h5 className="font-medium text-gray-900 mb-3">Billing Details</h5>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Name:</span>
+                      <span className="font-medium">{formData.customerName || 'Not provided'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Email:</span>
+                      <span className="font-medium">{formData.customerEmail || 'Not provided'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Address:</span>
+                      <span className="font-medium text-right">
+                        {formData.address && formData.city && formData.country
+                          ? `${formData.address}, ${formData.city}, ${formData.country}`
+                          : 'Not provided'
+                        }
+                      </span>
+                    </div>
+                  </div>
+                  {(!formData.customerName || !formData.customerEmail || !formData.address) && (
+                    <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded">
+                      <p className="text-xs text-yellow-700">
+                        Please complete the contact and billing information above before proceeding.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Amount Summary */}
+                <div className="border-t pt-4">
+                  <div className="flex justify-between items-center mb-4">
+                    <div>
+                      <span className="text-gray-600">Total Amount</span>
+                      <p className="text-xs text-gray-500">Including all taxes and fees</p>
+                    </div>
+                    <span className="text-2xl font-bold text-gray-900">{formatCurrency(getPrice() * 0.98)}</span>
+                  </div>
+
+                  {/* Complete Purchase Button */}
+                  <Button
+                    type="button"
+                    className="w-full"
+                    size="lg"
+                    loading={isProcessing}
+                    onClick={handleSubmit}
+                    disabled={!formData.customerName || !formData.customerEmail || !formData.address}
+                  >
+                    {isProcessing ? 'Processing...' : `Complete Purchase - ${formatCurrency(getPrice() * 0.98)}`}
+                  </Button>
+
+                  <p className="text-xs text-gray-500 text-center mt-3">
+                    By completing this purchase you agree to our Terms of Service and Privacy Policy.
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -352,22 +456,24 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
         )}
       </div>
 
-      {/* Submit Button */}
-      <div className="border-t pt-6">
-        <Button
-          type="submit"
-          className="w-full"
-          size="lg"
-          loading={isProcessing}
-          onClick={handleSubmit}
-        >
-          {isProcessing ? 'Processing...' : `Complete Purchase - ${formatCurrency(getPrice() * 0.98)}`}
-        </Button>
+      {/* Submit Button - Only show for non-card payment methods */}
+      {paymentMethod !== PaymentMethod.STRIPE_CARD && (
+        <div className="border-t pt-6">
+          <Button
+            type="submit"
+            className="w-full"
+            size="lg"
+            loading={isProcessing}
+            onClick={handleSubmit}
+          >
+            {isProcessing ? 'Processing...' : `Complete Purchase - ${formatCurrency(getPrice() * 0.98)}`}
+          </Button>
 
-        <p className="text-xs text-gray-500 text-center mt-4">
-          By completing this purchase you agree to our Terms of Service and Privacy Policy.
-        </p>
-      </div>
+          <p className="text-xs text-gray-500 text-center mt-4">
+            By completing this purchase you agree to our Terms of Service and Privacy Policy.
+          </p>
+        </div>
+      )}
 
       {/* Popup Modal for STRIPE_POPUP confirmation */}
       {showPopup && (
