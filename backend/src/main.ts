@@ -33,13 +33,32 @@ async function bootstrap() {
     .addTag('payments', 'Payment processing endpoints')
     .addTag('stripe', 'Stripe payment integration')
     .addTag('paypal', 'PayPal payment integration')
+    .addServer('https://shopify-checkout-api.vercel.app', 'Production API server')
     .addServer('http://localhost:29000', 'Development server')
-    .addServer('http://localhost:29000', 'Local API server')
     .addBearerAuth()
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api', app, document);
+
+  // Configure Swagger for production
+  SwaggerModule.setup('api', app, document, {
+    customCss: `
+      .topbar { display: none }
+      .swagger-ui .topbar { display: none }
+      .information-container { display: none }
+    `,
+    customSiteTitle: 'Digital Store API Documentation',
+    customfavIcon: '/favicon.ico',
+    swaggerOptions: {
+      persistAuthorization: true,
+      displayRequestDuration: true,
+      docExpansion: 'none',
+      filter: true,
+      showExtensions: true,
+      showCommonExtensions: true,
+      tryItOutEnabled: false,
+    },
+  });
 
   const port = process.env.PORT || 29000;
   await app.listen(port);
