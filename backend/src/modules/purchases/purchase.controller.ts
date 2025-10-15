@@ -209,7 +209,7 @@ export class PurchaseController {
   }
 
   @Patch(':id/renew')
-  @ApiOperation({ summary: 'Renew a purchase' })
+  @ApiOperation({ summary: 'Renew a purchase (only for active purchases)' })
   @ApiParam({
     name: 'id',
     description: 'Purchase ID',
@@ -222,6 +222,22 @@ export class PurchaseController {
   @ApiResponse({ status: 400, description: 'Cannot renew expired or inactive purchase.' })
   async renewPurchase(@Param('id') id: string): Promise<Purchase> {
     return this.purchaseService.renewPurchase(id);
+  }
+
+  @Patch(':id/renew-expired')
+  @ApiOperation({ summary: 'Renew an expired purchase' })
+  @ApiParam({
+    name: 'id',
+    description: 'Purchase ID',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Expired purchase has been renewed.',
+    type: Purchase,
+  })
+  @ApiResponse({ status: 400, description: 'Can only renew completed purchases.' })
+  async renewExpiredPurchase(@Param('id') id: string): Promise<Purchase> {
+    return this.purchaseService.renewExpiredPurchase(id);
   }
 
   @Patch(':id/extend')
@@ -260,5 +276,22 @@ export class PurchaseController {
       throw new Error('userId and packageId are required');
     }
     return this.purchaseService.createSamplePurchase(userId, packageId);
+  }
+
+  @Post('sample/expired')
+  @ApiOperation({ summary: 'Create a sample expired purchase (for development)' })
+  @ApiResponse({
+    status: 201,
+    description: 'Sample expired purchase created.',
+    type: Purchase,
+  })
+  async createExpiredSamplePurchase(
+    @Body('userId') userId: string,
+    @Body('packageId') packageId: string,
+  ): Promise<Purchase> {
+    if (!userId || !packageId) {
+      throw new Error('userId and packageId are required');
+    }
+    return this.purchaseService.createExpiredSamplePurchase(userId, packageId);
   }
 }

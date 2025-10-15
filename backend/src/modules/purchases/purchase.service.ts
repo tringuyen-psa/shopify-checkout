@@ -126,6 +126,29 @@ export class PurchaseService {
     return this.purchaseRepository.save(purchase);
   }
 
+  async renewExpiredPurchase(id: string): Promise<Purchase> {
+    const purchase = await this.findOne(id);
+
+    // Allow renewal of completed purchases (even if expired)
+    if (purchase.status !== PurchaseStatus.COMPLETED) {
+      throw new BadRequestException('Can only renew completed purchases');
+    }
+
+    // Start from current end date or current date, whichever is later
+    const now = new Date();
+    const currentEndDate = new Date(purchase.endDate);
+    const baseDate = currentEndDate > now ? currentEndDate : now;
+
+    // Calculate new end date from base date
+    const newEndDate = this.calculateEndDate(baseDate, purchase.billingCycle);
+
+    // Update dates and status if needed
+    purchase.startDate = baseDate;
+    purchase.endDate = newEndDate;
+
+    return this.purchaseRepository.save(purchase);
+  }
+
   async extendPurchase(id: string, days: number): Promise<Purchase> {
     const purchase = await this.findOne(id);
 
@@ -235,5 +258,44 @@ export class PurchaseService {
 
     // Auto-complete the sample purchase
     return this.completePurchase(purchase.id, 'sample_payment_id');
+  }
+
+  async createExpiredSamplePurchase(userId: string, packageId: string): Promise<Purchase> {
+    // Validate package exists
+    const packageExists = await this.packageService.validatePackageExists(packageId);
+    if (!packageExists) {
+      throw new NotFoundException('Package not found');
+    }
+
+    // Get price based on billing cycle
+    const price = await this.packageService.getPriceByPackageAndCycle(
+      packageId,
+      BillingCycle.MONTHLY,
+    );
+
+    // Create expired dates (ended yesterday)
+    const endDate = new Date();
+    endDate.setDate(endDate.getDate() - 1); // Yesterday
+
+    const startDate = new Date(endDate);
+    startDate.setMonth(startDate.getMonth() - 1); // One month before end date
+
+    const purchase = this.purchaseRepository.create({
+      packageId,
+      userId,
+      billingCycle: BillingCycle.MONTHLY,
+      price,
+      paymentMethod: PaymentMethod.STRIPE,
+      customerEmail: 'expired-sample@example.com',
+      customerName: 'Expired Sample User',
+      isRecurring: true,
+      startDate,
+      endDate,
+      status: PurchaseStatus.COMPLETED,
+      paymentId: 'expired_sample_payment_id',
+      metadata: { source: 'expired_sample', expired: true },
+    });
+
+    return this.purchaseRepository.save(purchase);
   }
 }
