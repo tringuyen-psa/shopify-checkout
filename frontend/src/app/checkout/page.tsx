@@ -14,7 +14,7 @@ import { ArrowLeft, CreditCard, Shield, Truck, Check, X } from 'lucide-react';
 import { StripePaymentService } from '@/lib/stripe';
 import { PurchaseService } from '@/lib/purchase';
 import { loadStripe } from '@stripe/stripe-js';
-import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import { Elements, CardElement, useStripe, useElements, CardNumberElement, CardExpiryElement, CardCvcElement } from '@stripe/react-stripe-js';
 
 // Initialize Stripe
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
@@ -153,7 +153,7 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
         // Update purchase with payment intent metadata
         await PurchaseService.completePurchase(purchase.id, paymentIntent.id);
 
-        // Confirm payment with Card Element
+        // Confirm payment with individual card elements
         const { error } = await stripe!.confirmPayment({
           elements: elements!,
           clientSecret: paymentIntent.client_secret,
@@ -326,9 +326,15 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
               <div className="p-6 space-y-6">
                 {/* Card Number Section */}
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-700">Card Number</label>
+                  <label className="text-sm font-medium text-gray-700">Card Information</label>
                   <div className="bg-white border border-gray-300 rounded-lg p-4 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-200">
-                    <CardElement options={cardElementOptions} />
+                    <CardNumberElement
+                      options={{
+                        style: cardElementOptions.style,
+                        placeholder: '1234 1234 1234 1234',
+                        showIcon: true,
+                      }}
+                    />
                   </div>
                   <div className="flex items-center justify-between text-xs text-gray-500">
                     <div className="flex items-center space-x-4">
@@ -350,6 +356,36 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
                         <span>JCB</span>
                       </div>
                     </div>
+                  </div>
+                </div>
+
+                {/* Expiration Date and Security Code */}
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Expiration Date */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Expiration date</label>
+                    <div className="bg-white border border-gray-300 rounded-lg p-4 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-200">
+                      <CardExpiryElement
+                        options={{
+                          style: cardElementOptions.style,
+                          placeholder: 'MM / YY',
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Security Code */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Security code</label>
+                    <div className="bg-white border border-gray-300 rounded-lg p-4 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-200">
+                      <CardCvcElement
+                        options={{
+                          style: cardElementOptions.style,
+                          placeholder: 'CVC',
+                        }}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500">3-digit code on back of card</p>
                   </div>
                 </div>
 
