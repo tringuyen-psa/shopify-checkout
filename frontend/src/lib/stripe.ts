@@ -4,13 +4,6 @@ export interface CreatePaymentIntentRequest {
   customerEmail?: string;
 }
 
-// Add type declarations for Stripe global object
-declare global {
-  interface Window {
-    Stripe: any;
-  }
-}
-
 export interface CreateCheckoutSessionRequest {
   packageName: string;
   price: number;
@@ -106,18 +99,9 @@ export class StripePaymentService {
     return response.json();
   }
 
+  // Note: loadStripeScript is no longer needed since we use react-stripe-js
+  // This method is kept for backward compatibility
   static loadStripeScript(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (window.Stripe) {
-        resolve();
-        return;
-      }
-
-      const script = document.createElement('script');
-      script.src = 'https://js.stripe.com/v3/';
-      script.onload = () => resolve();
-      script.onerror = () => reject(new Error('Failed to load Stripe script'));
-      document.body.appendChild(script);
-    });
+    return Promise.resolve();
   }
 }
