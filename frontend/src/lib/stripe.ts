@@ -4,6 +4,13 @@ export interface CreatePaymentIntentRequest {
   customerEmail?: string;
 }
 
+// Add type declarations for Stripe global object
+declare global {
+  interface Window {
+    Stripe: any;
+  }
+}
+
 export interface CreateCheckoutSessionRequest {
   packageName: string;
   price: number;
