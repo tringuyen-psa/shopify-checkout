@@ -49,6 +49,22 @@ async function bootstrap() {
     `,
     customSiteTitle: 'Digital Store API Documentation',
     customfavIcon: '/favicon.ico',
+    customJs: 'https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js',
+    customJsStr: `
+      // Load Swagger UI from CDN if local assets fail
+      window.onload = function() {
+        if (!window.SwaggerUIBundle) {
+          const script = document.createElement('script');
+          script.src = 'https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js';
+          document.head.appendChild(script);
+
+          const css = document.createElement('link');
+          css.rel = 'stylesheet';
+          css.href = 'https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css';
+          document.head.appendChild(css);
+        }
+      };
+    `,
     swaggerOptions: {
       persistAuthorization: true,
       displayRequestDuration: true,
