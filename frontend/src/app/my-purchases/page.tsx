@@ -28,6 +28,29 @@ function MyPurchasesPage() {
 
   const { stats, loading: statsLoading } = usePurchaseStats(CURRENT_USER_ID);
 
+  // Debug: Log purchase data to investigate discrepancy
+  useEffect(() => {
+    if (purchases.length > 0 && stats.total > 0) {
+      const activeCount = purchases.filter(p => {
+        const now = new Date();
+        const endDate = new Date(p.endDate);
+        return p.status === 'completed' && endDate > now;
+      }).length;
+
+      console.log('=== Purchase Data Debug ===');
+      console.log('Total purchases from API:', purchases.length);
+      console.log('Stats from API:', stats);
+      console.log('Calculated active count:', activeCount);
+      console.log('Active purchases from hook:', activePurchases.length);
+      console.log('All purchases:', purchases.map(p => ({
+        id: p.id,
+        status: p.status,
+        endDate: p.endDate,
+        packageName: p.package?.name
+      })));
+    }
+  }, [purchases, stats, activePurchases]);
+
   // Check if user is coming from successful payment
   useEffect(() => {
     const sessionId = searchParams.get('session_id');
@@ -219,7 +242,11 @@ function MyPurchasesPage() {
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
-                Active ({activePurchases.length})
+                Active ({purchases.filter(p => {
+                const now = new Date();
+                const endDate = new Date(p.endDate);
+                return p.status === 'completed' && endDate > now;
+              }).length})
               </button>
               <button
                 onClick={() => setActiveTab('expired')}
