@@ -551,7 +551,7 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
                           fontSize: '20px',
                           letterSpacing: '0.15em',
                         }}
-                        onChange={(e) => {
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                           let value = e.target.value.replace(/\s/g, ''); // Remove all spaces
                           let formattedValue = '';
 
@@ -572,8 +572,9 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
                           // Store formatted value for Stripe (without spaces)
                           e.target.dataset.cardNumber = value;
                         }}
-                        onInput={(e) => {
-                          let value = e.target.value.replace(/\s/g, ''); // Remove all spaces
+                        onInput={(e: React.FormEvent<HTMLInputElement>) => {
+                          const target = e.target as HTMLInputElement;
+                          let value = target.value.replace(/\s/g, ''); // Remove all spaces
                           let formattedValue = '';
 
                           // Format: add space every 4 digits
@@ -588,7 +589,7 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
                           formattedValue = formattedValue.slice(0, 19);
 
                           // Update input value
-                          e.target.value = formattedValue;
+                          target.value = formattedValue;
                         }}
                         maxLength={19} // 16 digits + 3 spaces
                       />
@@ -598,7 +599,7 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
                           options={{
                             style: { base: { fontSize: '1px' } },
                           }}
-                          onChange={(e) => {
+                          onChange={(e: any) => {
                             // Update custom input when Stripe element changes
                             const customInput = document.getElementById('cardNumber') as HTMLInputElement;
                             if (e.value && customInput) {
@@ -667,7 +668,7 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
                           fontSize: '18px',
                           letterSpacing: '0.1em',
                         }}
-                        onChange={(e) => {
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                           let value = e.target.value.replace(/\D/g, ''); // Remove non-digits
 
                           if (value.length >= 2) {
@@ -714,7 +715,7 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
                             fontSize: '18px',
                             letterSpacing: '0.1em',
                           }}
-                          onChange={(e) => {
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                             // Only allow numbers, max 4 digits
                             let value = e.target.value.replace(/\D/g, '').slice(0, 4);
                             e.target.value = value;
