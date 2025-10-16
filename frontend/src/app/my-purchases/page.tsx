@@ -1,16 +1,20 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { usePurchases, usePurchaseStats } from '@/hooks/usePurchases';
 import { PurchaseCard } from '@/components/PurchaseCard';
 import { Button } from '@/components/ui/Button';
-import { Package as PackageIcon, User, ArrowLeft, TrendingUp, Calendar, DollarSign } from 'lucide-react';
+import { Package as PackageIcon, User, ArrowLeft, TrendingUp, Calendar, DollarSign, CheckCircle } from 'lucide-react';
 
 // Mock user ID - in a real app, this would come from authentication
 const CURRENT_USER_ID = 'sample-user-123';
 
-export default function MyPurchasesPage() {
+function MyPurchasesPage() {
+  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<'all' | 'active' | 'expired'>('all');
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+
   const {
     purchases,
     activePurchases,
@@ -23,6 +27,20 @@ export default function MyPurchasesPage() {
   } = usePurchases(CURRENT_USER_ID);
 
   const { stats, loading: statsLoading } = usePurchaseStats(CURRENT_USER_ID);
+
+  // Check if user is coming from successful payment
+  useEffect(() => {
+    const sessionId = searchParams.get('session_id');
+    if (sessionId) {
+      setShowSuccessMessage(true);
+      // Hide success message after 5 seconds
+      const timer = setTimeout(() => {
+        setShowSuccessMessage(false);
+      }, 5000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [searchParams]);
 
   const filteredPurchases = purchases.filter(purchase => {
     const now = new Date();
@@ -55,6 +73,29 @@ export default function MyPurchasesPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Success Message */}
+      {showSuccessMessage && (
+        <div className="bg-green-50 border-b border-green-200">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div className="flex items-center">
+              <CheckCircle className="h-6 w-6 text-green-600 mr-3" />
+              <div>
+                <h3 className="text-lg font-semibold text-green-800">Payment Successful!</h3>
+                <p className="text-green-700">Your purchase has been completed and is now active.</p>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowSuccessMessage(false)}
+                className="ml-auto text-green-600 hover:text-green-800"
+              >
+                ×
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -231,3 +272,21 @@ export default function MyPurchasesPage() {
     </div>
   );
 }
+
+// Wrapper component to handle Suspense for useSearchParams
+function MyPurchasesPageWrapper() {
+  return (
+    <React.Suspense fallback={
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-black"></div>
+          <p className="mt-4 text-gray-600">Loading your purchases...</p>
+        </div>
+      </div>
+    }>
+      <MyPurchasesPage />
+    </React.Suspense>
+  );
+}
+
+export default MyPurchasesPageWrapper;

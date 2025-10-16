@@ -44,6 +44,9 @@ export class StripePaymentService {
   }
 
   static async createCheckoutSession(data: CreateCheckoutSessionRequest): Promise<CheckoutSession> {
+    console.log('Creating checkout session with data:', data);
+    console.log('API URL:', `${this.BASE_URL}/payments/stripe/create-checkout`);
+
     const response = await fetch(`${this.BASE_URL}/payments/stripe/create-checkout`, {
       method: 'POST',
       headers: {
@@ -52,11 +55,18 @@ export class StripePaymentService {
       body: JSON.stringify(data),
     });
 
+    console.log('Response status:', response.status);
+    console.log('Response ok:', response.ok);
+
     if (!response.ok) {
-      throw new Error('Failed to create checkout session');
+      const errorText = await response.text();
+      console.error('Error response body:', errorText);
+      throw new Error(`Failed to create checkout session: ${response.status} - ${errorText}`);
     }
 
-    return response.json();
+    const result = await response.json();
+    console.log('Checkout session response:', result);
+    return result;
   }
 
   static async confirmPayment(paymentIntentId: string): Promise<any> {

@@ -14,7 +14,7 @@ import { ArrowLeft, CreditCard, Shield, Truck, Check, X } from 'lucide-react';
 import { StripePaymentService } from '@/lib/stripe';
 import { PurchaseService } from '@/lib/purchase';
 import { loadStripe } from '@stripe/stripe-js';
-import { Elements, CardElement, useStripe, useElements, CardNumberElement, CardExpiryElement, CardCvcElement } from '@stripe/react-stripe-js';
+import { Elements, useStripe, useElements, CardNumberElement, CardExpiryElement, CardCvcElement } from '@stripe/react-stripe-js';
 
 // Initialize Stripe
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
@@ -59,10 +59,17 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
   onInputChange: (field: string, value: string) => void;
   onValidationError: (errors: Record<string, string>) => void;
 }) {
-  const stripe = useStripe();
-  const elements = useElements();
+  const stripe = paymentMethod === PaymentMethod.STRIPE_CARD ? useStripe() : null;
+  const elements = paymentMethod === PaymentMethod.STRIPE_CARD ? useElements() : null;
   const [isProcessing, setIsProcessing] = useState(false);
   const [showPopup, setShowPopup] = useState(false);
+  const [purchaseId, setPurchaseId] = useState<string | null>(null);
+  const [checkoutSessionId, setCheckoutSessionId] = useState<string | null>(null);
+
+  // Debug popup state changes
+  useEffect(() => {
+    console.log('=== showPopup state changed ===', showPopup);
+  }, [showPopup]);
 
   const getPrice = () => {
     switch (selectedCycle) {
@@ -138,9 +145,16 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
       console.log('Creating purchase:', purchaseData);
       const purchase = await PurchaseService.createPurchase(purchaseData);
 
+      // Save purchase ID for later use in popup confirmation
+      if (paymentMethod === PaymentMethod.STRIPE_POPUP) {
+        setPurchaseId(purchase.id);
+      }
+
       // Step 2: Process payment based on selected method
       const price = getPrice();
-      const baseUrl = window.location.origin;
+      // Use production URL for success/cancel redirects, fallback to current origin
+      const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://shopify-checkout-frontend.vercel.app' || window.location.origin;
+      console.log('Base URL for redirects:', baseUrl);
 
       if (paymentMethod === PaymentMethod.STRIPE_CARD) {
         // Create Payment Intent
@@ -153,25 +167,30 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
         // Update purchase with payment intent metadata
         await PurchaseService.completePurchase(purchase.id, paymentIntent.id);
 
-        // Confirm payment with individual card elements
-        const { error } = await stripe!.confirmPayment({
-          elements: elements!,
-          clientSecret: paymentIntent.client_secret,
-          confirmParams: {
-            return_url: `${baseUrl}/payment/success?session_id=${paymentIntent.id}`,
-            payment_method_data: {
-              billing_details: {
-                name: formData.customerName,
-                email: formData.customerEmail,
-                address: {
-                  line1: formData.address,
-                  city: formData.city,
-                  country: formData.country,
-                  postal_code: formData.zipCode,
-                },
-              },
+        // Create payment method with individual card elements
+        const { error: paymentMethodError, paymentMethod } = await stripe!.createPaymentMethod({
+          type: 'card',
+          card: elements!.getElement(CardNumberElement)!,
+          billing_details: {
+            name: formData.customerName,
+            email: formData.customerEmail,
+            address: {
+              line1: formData.address,
+              city: formData.city,
+              country: 'VN', // Always use Vietnam country code
+              postal_code: formData.zipCode,
             },
           },
+        });
+
+        if (paymentMethodError) {
+          throw new Error(paymentMethodError.message);
+        }
+
+        // Confirm payment with the created payment method
+        const { error } = await stripe!.confirmCardPayment(paymentIntent.client_secret, {
+          payment_method: paymentMethod.id,
+          return_url: `${baseUrl}/my-purchases?session_id=${paymentIntent.id}`,
         });
 
         if (error) {
@@ -182,22 +201,11 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
 
       } else if (paymentMethod === PaymentMethod.STRIPE_POPUP) {
         // Show popup confirmation first
+        console.log('=== STRIPE_POPUP selected ===');
+        console.log('Setting showPopup to true for STRIPE_POPUP');
         setShowPopup(true);
-
-        // Create Checkout Session
-        const checkoutSession = await StripePaymentService.createCheckoutSession({
-          packageName: pkg.name,
-          price: price,
-          customerEmail: formData.customerEmail,
-          successUrl: `${baseUrl}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
-          cancelUrl: `${baseUrl}/payment/cancel`,
-        });
-
-        // Update purchase with session metadata (webhook will handle final update)
-        await PurchaseService.completePurchase(purchase.id, checkoutSession.sessionId);
-
-        // Redirect to Stripe Checkout
-        window.location.href = checkoutSession.checkoutUrl;
+        console.log('showPopup should be true now');
+        console.log('Current popup state:', showPopup);
 
       } else {
         // PayPal flow (placeholder)
@@ -211,13 +219,113 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
       alert(`Payment failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsProcessing(false);
-      setShowPopup(false);
+      // Don't reset popup state here - let popup handle its own closing
+      if (paymentMethod !== PaymentMethod.STRIPE_POPUP) {
+        setShowPopup(false);
+      }
     }
   };
 
-  const handlePopupConfirm = () => {
-    setShowPopup(false);
-    // The form submission will handle the redirect
+  const handlePopupConfirm = async () => {
+    console.log('=== handlePopupConfirm called ===');
+    console.log('purchaseId:', purchaseId);
+    console.log('pkg:', pkg);
+    console.log('formData:', formData);
+
+    if (!purchaseId) {
+      console.log('No purchaseId, returning');
+      setShowPopup(false);
+      setIsProcessing(false);
+      return;
+    }
+
+    try {
+      const price = getPrice();
+      // Use production URL for success/cancel redirects, fallback to current origin
+      const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://shopify-checkout-frontend.vercel.app' || window.location.origin;
+      console.log('Base URL for redirects:', baseUrl);
+
+      console.log('Creating checkout session with data:', {
+        packageName: pkg.name,
+        price: price,
+        customerEmail: formData.customerEmail,
+        successUrl: `${baseUrl}/my-purchases?session_id={CHECKOUT_SESSION_ID}`,
+        cancelUrl: `${baseUrl}/payment/cancel`,
+      });
+
+      // Create Checkout Session
+      const checkoutSession = await StripePaymentService.createCheckoutSession({
+        packageName: pkg.name,
+        price: price,
+        customerEmail: formData.customerEmail,
+        successUrl: `${baseUrl}/my-purchases?session_id={CHECKOUT_SESSION_ID}`,
+        cancelUrl: `${baseUrl}/payment/cancel`,
+      });
+
+      console.log('Checkout session created:', checkoutSession);
+
+      if (!checkoutSession || !checkoutSession.checkoutUrl) {
+        throw new Error('Invalid checkout session response');
+      }
+
+      // Update purchase with session metadata (webhook will handle final update)
+      console.log('Updating purchase with session ID:', checkoutSession.sessionId);
+      await PurchaseService.completePurchase(purchaseId, checkoutSession.sessionId);
+
+      // Save checkout session ID for tracking
+      setCheckoutSessionId(checkoutSession.sessionId);
+
+      console.log('About to open popup with URL:', checkoutSession.checkoutUrl);
+
+      // For testing: Always redirect instead of popup to bypass popup blockers
+      console.log('Redirecting to Stripe (bypassing popup)...');
+      window.location.href = checkoutSession.checkoutUrl;
+      return;
+
+      // Original popup code (commented out for testing)
+      /*
+      // Try to open popup first
+      let popup = window.open(
+        checkoutSession.checkoutUrl,
+        'stripe-checkout',
+        'width=500,height=600,scrollbars=yes,resizable=yes'
+      );
+
+      console.log('Popup opened:', popup);
+
+      // Check if popup was blocked
+      if (!popup || popup.closed || typeof popup.closed === 'undefined') {
+        console.log('Popup blocked or failed, redirecting to Stripe checkout in same tab...');
+        // Fallback: Redirect to Stripe checkout in same tab
+        window.location.href = checkoutSession.checkoutUrl;
+        return;
+      }
+
+      // Poll to check if popup is closed
+      const checkClosed = setInterval(() => {
+        if (popup!.closed) {
+          clearInterval(checkClosed);
+          setShowPopup(false);
+          setIsProcessing(false);
+
+          // Show notification to user
+          alert('Thank you for your purchase! You will receive a confirmation email shortly. If you completed the payment, your purchase will be processed automatically.');
+
+          // Here you can add additional logic like redirecting to a success page
+          // The webhook will handle the purchase completion
+        }
+      }, 1000);
+
+      // Close confirmation popup
+      setShowPopup(false);
+      */
+
+    } catch (error) {
+      console.error('Error creating checkout session:', error);
+      alert(`Failed to create checkout session: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setShowPopup(false);
+      setIsProcessing(false);
+    }
   };
 
   const handlePopupCancel = () => {
@@ -283,7 +391,7 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
           value={formData.country}
           onChange={(e) => onInputChange('country', e.target.value)}
           error={errors.country}
-          placeholder="United States"
+          placeholder="Việt Nam"
           required
         />
       </div>
@@ -511,9 +619,11 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
         </div>
       )}
 
-      {/* Popup Modal for STRIPE_POPUP confirmation */}
+          {/* Popup Modal for STRIPE_POPUP confirmation */}
       {showPopup && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <>
+          {console.log('=== POPUP RENDERING ===', { showPopup, purchaseId })}
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">Confirm Payment</h3>
@@ -529,7 +639,7 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
 
             <div className="mb-6">
               <p className="text-gray-600 mb-4">
-                You will be redirected to Stripe's secure checkout to complete your payment of {formatCurrency(getPrice() * 0.98)}.
+                Click "Continue to Payment" to open Stripe's secure checkout popup where you can complete your payment of {formatCurrency(getPrice() * 0.98)}.
               </p>
 
               <div className="bg-blue-50 p-4 rounded-lg">
@@ -537,6 +647,9 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
                   <Shield className="h-5 w-5 text-blue-600" />
                   <span className="text-sm font-medium text-blue-900">Secure Checkout by Stripe</span>
                 </div>
+                <p className="text-xs text-blue-700 mt-1">
+                  A new window will open with Stripe's secure payment form
+                </p>
               </div>
             </div>
 
@@ -557,6 +670,7 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
             </div>
           </div>
         </div>
+        </>
       )}
     </div>
   );
@@ -578,9 +692,9 @@ function CheckoutPage() {
     customerEmail: '',
     address: '',
     city: '',
-    country: '',
+    country: 'Việt Nam', // Default to Vietnam
     zipCode: '',
-    userId: 'demo-user-' + Math.random().toString(36).slice(2, 11),
+    userId: 'sample-user-123',
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
