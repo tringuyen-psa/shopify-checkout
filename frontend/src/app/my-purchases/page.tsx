@@ -12,7 +12,7 @@ const CURRENT_USER_ID = 'sample-user-123';
 
 function MyPurchasesPage() {
   const searchParams = useSearchParams();
-  const [activeTab, setActiveTab] = useState<'all' | 'active' | 'expired'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'active' | 'expired' | 'pending' | 'cancelled'>('all');
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
 
   const {
@@ -51,6 +51,10 @@ function MyPurchasesPage() {
         return purchase.status === 'completed' && endDate > now;
       case 'expired':
         return purchase.status === 'completed' && endDate <= now;
+      case 'pending':
+        return purchase.status === 'pending';
+      case 'cancelled':
+        return purchase.status === 'cancelled';
       default:
         return true;
     }
@@ -231,6 +235,26 @@ function MyPurchasesPage() {
                   return p.status === 'completed' && endDate <= now;
                 }).length})
               </button>
+              <button
+                onClick={() => setActiveTab('pending')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'pending'
+                    ? 'border-black text-black'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Pending ({purchases.filter(p => p.status === 'pending').length})
+              </button>
+              <button
+                onClick={() => setActiveTab('cancelled')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'cancelled'
+                    ? 'border-black text-black'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Cancelled ({purchases.filter(p => p.status === 'cancelled').length})
+              </button>
             </nav>
           </div>
         </div>
@@ -240,11 +264,24 @@ function MyPurchasesPage() {
           <div className="text-center py-16">
             <PackageIcon className="h-16 w-16 text-gray-400 mx-auto mb-4" />
             <h3 className="text-xl font-semibold text-gray-900 mb-2">
-              {activeTab === 'all' ? 'No purchases yet' : `No ${activeTab} purchases`}
+              {activeTab === 'all' ? 'No purchases yet' :
+               activeTab === 'active' ? 'No active purchases' :
+               activeTab === 'expired' ? 'No expired purchases' :
+               activeTab === 'pending' ? 'No pending purchases' :
+               activeTab === 'cancelled' ? 'No cancelled purchases' :
+               `No ${activeTab} purchases`}
             </h3>
             <p className="text-gray-600 mb-6">
               {activeTab === 'all'
                 ? 'Start by browsing our packages and making your first purchase.'
+                : activeTab === 'active'
+                ? 'You don\'t have any active purchases at the moment.'
+                : activeTab === 'expired'
+                ? 'You don\'t have any expired purchases.'
+                : activeTab === 'pending'
+                ? 'You don\'t have any pending purchases.'
+                : activeTab === 'cancelled'
+                ? 'You don\'t have any cancelled purchases.'
                 : `You don't have any ${activeTab} purchases at the moment.`
               }
             </p>

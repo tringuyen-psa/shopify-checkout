@@ -50,7 +50,7 @@ const cardElementOptions = {
 };
 
 // CheckoutForm Component with Stripe Elements
-function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onInputChange, onValidationError }: {
+function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onInputChange, onValidationError, mode, purchaseId, extendDays }: {
   pkg: any;
   selectedCycle: BillingCycle;
   paymentMethod: PaymentMethod;
@@ -58,12 +58,15 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
   errors: any;
   onInputChange: (field: string, value: string) => void;
   onValidationError: (errors: Record<string, string>) => void;
+  mode?: string;
+  purchaseId?: string;
+  extendDays?: string;
 }) {
   const stripe = paymentMethod === PaymentMethod.STRIPE_CARD ? useStripe() : null;
   const elements = paymentMethod === PaymentMethod.STRIPE_CARD ? useElements() : null;
   const [isProcessing, setIsProcessing] = useState(false);
   const [showPopup, setShowPopup] = useState(false);
-  const [purchaseId, setPurchaseId] = useState<string | null>(null);
+  const [existingPurchaseId, setExistingPurchaseId] = useState<string | null>(purchaseId || null);
   const [checkoutSessionId, setCheckoutSessionId] = useState<string | null>(null);
 
   // Debug popup state changes
@@ -125,29 +128,44 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
     setIsProcessing(true);
 
     try {
-      // Step 1: Create purchase record first
-      const purchaseData = {
-        packageId: pkg.id,
-        userId: formData.userId,
-        billingCycle: selectedCycle,
-        paymentMethod,
-        customerEmail: formData.customerEmail,
-        customerName: formData.customerName,
-        isRecurring: true,
-        metadata: {
-          address: formData.address,
-          city: formData.city,
-          country: formData.country,
-          zipCode: formData.zipCode,
-        },
-      };
+      let purchase;
 
-      console.log('Creating purchase:', purchaseData);
-      const purchase = await PurchaseService.createPurchase(purchaseData);
+      if (existingPurchaseId && (mode === 'renew' || mode === 'extend' || mode === 'purchase-again')) {
+        // For renew/extend/purchase-again, use existing purchase
+        console.log('Using existing purchase:', existingPurchaseId, 'mode:', mode);
+        purchase = { id: existingPurchaseId };
 
-      // Save purchase ID for later use in popup confirmation
-      if (paymentMethod === PaymentMethod.STRIPE_POPUP) {
-        setPurchaseId(purchase.id);
+        if (paymentMethod === PaymentMethod.STRIPE_POPUP) {
+          setExistingPurchaseId(existingPurchaseId);
+        }
+      } else {
+        // Step 1: Create new purchase record first
+        const purchaseData = {
+          packageId: pkg.id,
+          userId: formData.userId,
+          billingCycle: selectedCycle,
+          paymentMethod,
+          customerEmail: formData.customerEmail,
+          customerName: formData.customerName,
+          isRecurring: true,
+          metadata: {
+            address: formData.address,
+            city: formData.city,
+            country: formData.country,
+            zipCode: formData.zipCode,
+            mode: mode || 'new',
+            originalPurchaseId: existingPurchaseId,
+            extendDays: extendDays,
+          },
+        };
+
+        console.log('Creating purchase:', purchaseData);
+        purchase = await PurchaseService.createPurchase(purchaseData);
+
+        // Save purchase ID for later use in popup confirmation
+        if (paymentMethod === PaymentMethod.STRIPE_POPUP) {
+          setExistingPurchaseId(purchase.id);
+        }
       }
 
       // Step 2: Process payment based on selected method
@@ -188,16 +206,30 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
         }
 
         // Confirm payment with the created payment method
-        const { error } = await stripe!.confirmCardPayment(paymentIntent.client_secret, {
+        const { error, paymentIntent: confirmedIntent } = await stripe!.confirmCardPayment(paymentIntent.client_secret, {
           payment_method: paymentMethod.id,
-          return_url: `${baseUrl}/my-purchases?session_id=${paymentIntent.id}`,
         });
 
         if (error) {
           throw new Error(error.message);
         }
 
-        // Payment will be redirected to return_url automatically
+        // Check if payment was successful
+        if (confirmedIntent?.status === 'succeeded') {
+          // Payment successful - redirect to my-purchases
+          console.log('Payment successful, redirecting to /my-purchases');
+          window.location.href = `${baseUrl}/my-purchases?session_id=${confirmedIntent.id}`;
+          return;
+        } else if (confirmedIntent?.status === 'processing') {
+          // Payment is processing - show message and redirect
+          console.log('Payment is processing, redirecting to /my-purchases');
+          window.location.href = `${baseUrl}/my-purchases?session_id=${confirmedIntent.id}`;
+          return;
+        } else {
+          // Payment requires additional action
+          console.log('Payment requires additional action:', confirmedIntent?.status);
+          throw new Error(`Payment status: ${confirmedIntent?.status || 'unknown'}. Please contact support.`);
+        }
 
       } else if (paymentMethod === PaymentMethod.STRIPE_POPUP) {
         // Show popup confirmation first
@@ -228,12 +260,13 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
 
   const handlePopupConfirm = async () => {
     console.log('=== handlePopupConfirm called ===');
-    console.log('purchaseId:', purchaseId);
+    console.log('existingPurchaseId:', existingPurchaseId);
+    console.log('mode:', mode);
     console.log('pkg:', pkg);
     console.log('formData:', formData);
 
-    if (!purchaseId) {
-      console.log('No purchaseId, returning');
+    if (!existingPurchaseId) {
+      console.log('No existingPurchaseId, returning');
       setShowPopup(false);
       setIsProcessing(false);
       return;
@@ -245,22 +278,24 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
       const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://shopify-checkout-frontend.vercel.app' || window.location.origin;
       console.log('Base URL for redirects:', baseUrl);
 
-      console.log('Creating checkout session with data:', {
+      const sessionData = {
         packageName: pkg.name,
         price: price,
         customerEmail: formData.customerEmail,
         successUrl: `${baseUrl}/my-purchases?session_id={CHECKOUT_SESSION_ID}`,
         cancelUrl: `${baseUrl}/payment/cancel`,
-      });
+      };
+
+      // Add mode-specific metadata
+      if (mode) {
+        console.log('Adding mode metadata:', { mode, originalPurchaseId: existingPurchaseId, extendDays });
+        // Note: Backend will need to handle these metadata fields for webhook processing
+      }
+
+      console.log('Creating checkout session with data:', sessionData);
 
       // Create Checkout Session
-      const checkoutSession = await StripePaymentService.createCheckoutSession({
-        packageName: pkg.name,
-        price: price,
-        customerEmail: formData.customerEmail,
-        successUrl: `${baseUrl}/my-purchases?session_id={CHECKOUT_SESSION_ID}`,
-        cancelUrl: `${baseUrl}/payment/cancel`,
-      });
+      const checkoutSession = await StripePaymentService.createCheckoutSession(sessionData);
 
       console.log('Checkout session created:', checkoutSession);
 
@@ -270,7 +305,7 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
 
       // Update purchase with session metadata (webhook will handle final update)
       console.log('Updating purchase with session ID:', checkoutSession.sessionId);
-      await PurchaseService.completePurchase(purchaseId, checkoutSession.sessionId);
+      await PurchaseService.completePurchase(existingPurchaseId, checkoutSession.sessionId);
 
       // Save checkout session ID for tracking
       setCheckoutSessionId(checkoutSession.sessionId);
@@ -622,7 +657,7 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
           {/* Popup Modal for STRIPE_POPUP confirmation */}
       {showPopup && (
         <>
-          {console.log('=== POPUP RENDERING ===', { showPopup, purchaseId })}
+          {console.log('=== POPUP RENDERING ===', { showPopup, existingPurchaseId })}
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
             <div className="flex items-center justify-between mb-4">
@@ -680,6 +715,11 @@ function CheckoutPage() {
   const searchParams = useSearchParams();
   const packageId = searchParams.get('packageId');
   const billingCycle = searchParams.get('billingCycle') as BillingCycle;
+  const purchaseId = searchParams.get('purchaseId');
+  const mode = searchParams.get('mode'); // renew, extend, purchase-again
+  const preFilledName = searchParams.get('name');
+  const preFilledEmail = searchParams.get('email');
+  const extendDays = searchParams.get('days');
 
   const { package: pkg, loading } = usePackage(packageId || '');
 
@@ -688,8 +728,8 @@ function CheckoutPage() {
 
   // Form state
   const [formData, setFormData] = useState({
-    customerName: '',
-    customerEmail: '',
+    customerName: preFilledName || '',
+    customerEmail: preFilledEmail || '',
     address: '',
     city: '',
     country: 'Việt Nam', // Default to Vietnam
@@ -797,7 +837,12 @@ function CheckoutPage() {
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back
             </Button>
-            <h1 className="text-2xl font-bold text-gray-900">Checkout</h1>
+            <h1 className="text-2xl font-bold text-gray-900">
+              {mode === 'renew' ? 'Renew Purchase' :
+               mode === 'extend' ? 'Extend Purchase' :
+               mode === 'purchase-again' ? 'Purchase Again' :
+               'Checkout'}
+            </h1>
           </div>
         </div>
       </header>
@@ -917,6 +962,9 @@ function CheckoutPage() {
                       errors={errors}
                       onInputChange={handleInputChange}
                       onValidationError={handleValidationError}
+                      mode={mode || undefined}
+                      purchaseId={purchaseId || undefined}
+                      extendDays={extendDays || undefined}
                     />
                   </Elements>
                 ) : (
@@ -928,6 +976,9 @@ function CheckoutPage() {
                     errors={errors}
                     onInputChange={handleInputChange}
                     onValidationError={handleValidationError}
+                    mode={mode || undefined}
+                    purchaseId={purchaseId || undefined}
+                    extendDays={extendDays || undefined}
                   />
                 )}
               </CardContent>

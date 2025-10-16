@@ -42,15 +42,11 @@ export const PurchaseCard: React.FC<PurchaseCardProps> = ({
   const daysRemaining = getDaysRemaining(purchase.endDate);
   const isExpiringSoon = daysRemaining <= 7 && daysRemaining > 0;
 
-  const handleRenew = async () => {
-    if (!onRenew) return;
-    setLoading(true);
-    try {
-      await onRenew(purchase.id);
-    } catch (error) {
-      console.error('Failed to renew purchase:', error);
-    } finally {
-      setLoading(false);
+  const handleRenew = () => {
+    // Redirect to checkout for renewal payment with existing purchase data
+    const packageId = purchase.packageId;
+    if (packageId) {
+      window.location.href = `/checkout?packageId=${packageId}&billingCycle=${purchase.billingCycle}&purchaseId=${purchase.id}&mode=renew`;
     }
   };
 
@@ -66,17 +62,13 @@ export const PurchaseCard: React.FC<PurchaseCardProps> = ({
     }
   };
 
-  const handleExtend = async () => {
-    if (!onExtend) return;
-    setLoading(true);
-    try {
-      await onExtend(purchase.id, extendDays);
-      setShowExtendModal(false);
-    } catch (error) {
-      console.error('Failed to extend purchase:', error);
-    } finally {
-      setLoading(false);
+  const handleExtend = () => {
+    // Redirect to checkout for extension payment with existing purchase data
+    const packageId = purchase.packageId;
+    if (packageId) {
+      window.location.href = `/checkout?packageId=${packageId}&billingCycle=${purchase.billingCycle}&purchaseId=${purchase.id}&mode=extend&days=${extendDays}`;
     }
+    setShowExtendModal(false);
   };
 
   const getStatusIcon = () => {
@@ -204,18 +196,23 @@ export const PurchaseCard: React.FC<PurchaseCardProps> = ({
             </div>
           )}
 
-          {/* Action buttons for expired purchases */}
-          {showActions && statusInfo.status === 'expired' && (
+          {/* Action buttons for expired, pending, and cancelled purchases */}
+          {showActions && (statusInfo.status === 'expired' || statusInfo.status === 'pending' || statusInfo.status === 'cancelled') && (
             <div className="flex space-x-2 pt-4 border-t border-gray-100">
               <Button
                 variant="default"
                 size="sm"
-                onClick={handleRenew}
-                loading={loading}
+                onClick={() => {
+                  // Redirect to checkout page to purchase again with existing customer data
+                  const packageId = purchase.packageId;
+                  if (packageId) {
+                    window.location.href = `/checkout?packageId=${packageId}&billingCycle=${purchase.billingCycle}&purchaseId=${purchase.id}&mode=purchase-again&name=${encodeURIComponent(purchase.customerName || '')}&email=${encodeURIComponent(purchase.customerEmail || '')}`;
+                  }
+                }}
                 className="flex-1"
               >
                 <RefreshCw className="h-3 w-3 mr-1" />
-                Reactivate
+                Purchase Again
               </Button>
             </div>
           )}
