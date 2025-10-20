@@ -5,10 +5,13 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   OneToMany,
+  ManyToOne,
 } from "typeorm";
 import { ApiProperty } from "@nestjs/swagger";
 import { Purchase } from "../../purchases/entities/purchase.entity";
 import { BillingCycle } from "../../../common/enums/billing-cycle.enum.js";
+import { Shop } from "../../shops/entities/shop.entity";
+import { Subscription } from "../../subscriptions/entities/subscription.entity";
 
 @Entity("packages")
 export class Package {
@@ -20,11 +23,25 @@ export class Package {
   id: string;
 
   @ApiProperty({
+    description: "Shop ID this package belongs to",
+    example: "shop-uuid",
+  })
+  @Column({ nullable: true })
+  shopId: string;
+
+  @ApiProperty({
     description: "Name of the digital package",
     example: "Pro Digital Suite",
   })
   @Column({ type: "varchar", length: 255 })
   name: string;
+
+  @ApiProperty({
+    description: "URL-friendly name",
+    example: "pro-digital-suite",
+  })
+  @Column({ nullable: true })
+  slug: string;
 
   @ApiProperty({
     description: "Detailed description of the package",
@@ -76,20 +93,45 @@ export class Package {
   features: string[];
 
   @ApiProperty({
+    description: "Package images URLs",
+    example: ["https://example.com/image1.jpg", "https://example.com/image2.jpg"],
+    required: false,
+    isArray: true,
+  })
+  @Column("simple-array", { nullable: true })
+  images: string[];
+
+  @ApiProperty({
+    description: "Package category",
+    example: "Software",
+    required: false,
+  })
+  @Column({ nullable: true })
+  category: string;
+
+  @ApiProperty({
+    description: "Whether this is a subscription package",
+    example: true,
+    default: false,
+  })
+  @Column({ default: false })
+  isSubscription: boolean;
+
+  @ApiProperty({
+    description: "Number of trial days for subscription",
+    example: 7,
+    required: false,
+  })
+  @Column({ nullable: true })
+  trialDays: number;
+
+  @ApiProperty({
     description: "Whether the package is currently active",
     example: true,
     default: true,
   })
   @Column({ type: "boolean", default: true })
   isActive: boolean;
-
-  @ApiProperty({
-    description: "URL of the package image",
-    example: "https://example.com/image.jpg",
-    required: false,
-  })
-  @Column({ type: "varchar", length: 500, nullable: true })
-  imageUrl: string;
 
   @ApiProperty({
     description: "When the package was created",
@@ -105,8 +147,14 @@ export class Package {
   @UpdateDateColumn()
   updatedAt: Date;
 
+  @ManyToOne(() => Shop, shop => shop.packages)
+  shop: Shop;
+
   @OneToMany(() => Purchase, (purchase) => purchase.package)
   purchases: Purchase[];
+
+  @OneToMany(() => Subscription, (subscription) => subscription.package)
+  subscriptions: Subscription[];
 
   // Helper method to get price based on billing cycle
   getPriceByCycle(cycle: BillingCycle): number {

@@ -6,10 +6,14 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
+  OneToMany,
 } from "typeorm";
 import { ApiProperty } from "@nestjs/swagger";
 import { Package } from "../../packages/entities/package.entity";
 import { BillingCycle } from "../../../common/enums/billing-cycle.enum";
+import { User } from "../../users/entities/user.entity";
+import { Shop } from "../../shops/entities/shop.entity";
+import { Subscription } from "../../subscriptions/entities/subscription.entity";
 
 export enum PurchaseStatus {
   PENDING = "pending",
@@ -42,11 +46,14 @@ export class Purchase {
   @Column({ type: "uuid" })
   packageId: string;
 
+  @Column({ type: "uuid", nullable: true })
+  shopId: string;
+
   @ApiProperty({
     description: "User ID who made the purchase",
     example: "user123",
   })
-  @Column({ type: "varchar", length: 255 })
+  @Column({ type: "varchar", nullable: true })
   userId: string;
 
   @ApiProperty({
@@ -160,6 +167,19 @@ export class Purchase {
   @ManyToOne(() => Package, (pkg) => pkg.purchases, { eager: true })
   @JoinColumn({ name: "packageId" })
   package: Package;
+
+  // Note: User relationship removed due to userId being VARCHAR (not UUID)
+  // This prevents foreign key constraint issues with non-UUID user identifiers
+  // @ManyToOne(() => User, user => user.purchases)
+  // @JoinColumn({ name: "userId" })
+  // user: User;
+
+  @ManyToOne(() => Shop, shop => shop.purchases)
+  @JoinColumn({ name: "shopId" })
+  shop: Shop;
+
+  @OneToMany(() => Subscription, subscription => subscription.purchase)
+  subscription: Subscription;
 
   // Helper methods
   isActive(): boolean {

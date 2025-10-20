@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Purchase, BillingCycle } from '@/types/package';
+import { Purchase } from '@/types/purchase';
+import { BillingCycle } from '@/types/package';
 import {
   getPurchaseStatus,
   getDaysRemaining,

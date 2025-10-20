@@ -1,5 +1,4 @@
-import { CreatePurchaseDto, Purchase, PaymentMethod } from '@/types/purchase';
-import { BillingCycle } from '@/types/package';
+import { CreatePurchaseDto, Purchase, PaymentMethod, BillingCycle } from '@/types/purchase';
 
 export interface PurchaseRequest extends Omit<CreatePurchaseDto, 'billingCycle'> {
   billingCycle: BillingCycle;

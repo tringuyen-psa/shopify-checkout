@@ -1,4 +1,7 @@
-import { Package } from "./package";
+import { Package, BillingCycle } from "./package";
+
+// Re-export BillingCycle for convenience
+export { BillingCycle };
 
 export enum PurchaseStatus {
   PENDING = "pending",
@@ -18,7 +21,7 @@ export interface Purchase {
   id: string;
   packageId: string;
   userId: string;
-  billingCycle: string;
+  billingCycle: BillingCycle;
   price: number;
   status: PurchaseStatus;
   paymentMethod: PaymentMethod;
@@ -37,7 +40,7 @@ export interface Purchase {
 export interface CreatePurchaseDto {
   packageId: string;
   userId: string;
-  billingCycle: string;
+  billingCycle: BillingCycle;
   paymentMethod: PaymentMethod;
   customerEmail: string;
   customerName: string;

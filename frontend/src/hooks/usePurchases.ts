@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { purchaseApi } from '@/lib/api';
-import { Purchase, PurchaseStats, BillingCycle } from '@/types/package';
+import { Purchase, PurchaseStats } from '@/types/purchase';
+import { BillingCycle } from '@/types/package';
 
 export const usePurchases = (userId: string) => {
   const [purchases, setPurchases] = useState<Purchase[]>([]);
