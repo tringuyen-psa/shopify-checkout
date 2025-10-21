@@ -89,16 +89,17 @@ function RegisterForm() {
     setIsLoading(true);
 
     try {
-      // Simulate API call
-      const response = await fetch('/api/auth/register', {
+      // Call backend API
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          fullName: formData.fullName,
+          name: formData.fullName,
           email: formData.email,
           password: formData.password,
+          role: 'customer',
         }),
       });
 
@@ -106,8 +107,8 @@ function RegisterForm() {
 
       if (response.ok) {
         // Store token in localStorage
-        if (data.token) {
-          localStorage.setItem('auth_token', data.token);
+        if (data.accessToken) {
+          localStorage.setItem('auth_token', data.accessToken);
           localStorage.setItem('user_data', JSON.stringify(data.user));
         }
 

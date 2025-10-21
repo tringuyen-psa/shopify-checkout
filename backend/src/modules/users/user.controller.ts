@@ -12,6 +12,7 @@ import {
   Request,
 } from '@nestjs/common';
 import { UserService } from './user.service';
+import { UserSeederService } from './user.seeder.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { LoginUserDto } from './dto/login-user.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -20,7 +21,10 @@ import { UserRole } from './entities/user.entity';
 
 @Controller('users')
 export class UserController {
-  constructor(private readonly userService: UserService) {}
+  constructor(
+    private readonly userService: UserService,
+    private readonly userSeederService: UserSeederService,
+  ) {}
 
   @Post('register')
   create(@Body() createUserDto: CreateUserDto) {
@@ -31,6 +35,40 @@ export class UserController {
   @HttpCode(HttpStatus.OK)
   login(@Body() loginUserDto: LoginUserDto) {
     return this.userService.login(loginUserDto);
+  }
+
+  @Post('seed-demo')
+  @HttpCode(HttpStatus.OK)
+  async seedDemoUser() {
+    const user = await this.userSeederService.createDemoUser();
+    const result = await this.userService.login({
+      email: user.email,
+      password: 'demo123',
+    });
+
+    return {
+      message: 'Demo user created and logged in successfully',
+      user: result.user,
+      accessToken: result.accessToken,
+      demoCredentials: {
+        email: 'demo@example.com',
+        password: 'demo123',
+      }
+    };
+  }
+
+  @Post('seed-test-users')
+  @HttpCode(HttpStatus.OK)
+  async seedTestUsers() {
+    await this.userSeederService.createTestUsers();
+    return {
+      message: 'Test users created successfully',
+      users: [
+        { email: 'john@example.com', password: 'password123', role: 'customer' },
+        { email: 'jane@example.com', password: 'password123', role: 'shop_owner' },
+        { email: 'admin@example.com', password: 'admin123', role: 'platform_admin' },
+      ]
+    };
   }
 
   @Get()

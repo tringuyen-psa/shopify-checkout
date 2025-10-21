@@ -68,21 +68,24 @@ function LoginForm() {
     setIsLoading(true);
 
     try {
-      // Simulate API call
-      const response = await fetch('/api/auth/login', {
+      // Call backend API
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          email: formData.email,
+          password: formData.password,
+        }),
       });
 
       const data = await response.json();
 
       if (response.ok) {
         // Store token in localStorage
-        if (data.token) {
-          localStorage.setItem('auth_token', data.token);
+        if (data.accessToken) {
+          localStorage.setItem('auth_token', data.accessToken);
           localStorage.setItem('user_data', JSON.stringify(data.user));
         }
 
