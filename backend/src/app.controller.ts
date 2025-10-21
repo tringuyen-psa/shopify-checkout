@@ -1,10 +1,16 @@
-import { Controller, Get, Res } from '@nestjs/common';
+import { Controller, Get, Res, Post, Body } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { Response } from 'express';
+import { UserSeederService } from './modules/users/user.seeder.service';
+import { UserService } from './modules/users/user.service';
 
 @ApiTags('app')
 @Controller()
 export class AppController {
+  constructor(
+    private readonly userSeederService: UserSeederService,
+    private readonly userService: UserService,
+  ) {}
   @Get()
   @ApiOperation({ summary: 'Get API health and information' })
   @ApiResponse({
@@ -134,5 +140,68 @@ export class AppController {
 
     res.setHeader('Content-Type', 'text/html');
     res.send(html);
+  }
+
+  @Post('create-demo-user')
+  @ApiOperation({ summary: 'Create demo user for testing' })
+  @ApiResponse({
+    status: 200,
+    description: 'Demo user created successfully',
+  })
+  async createDemoUser() {
+    try {
+      const user = await this.userSeederService.createDemoUser();
+      const loginResult = await this.userService.login({
+        email: user.email,
+        password: 'demo123',
+      });
+
+      return {
+        success: true,
+        message: 'Demo user created and logged in successfully',
+        user: loginResult.user,
+        accessToken: loginResult.accessToken,
+        credentials: {
+          email: 'demo@example.com',
+          password: 'demo123',
+        },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: 'Failed to create demo user',
+        error: error.message,
+      };
+    }
+  }
+
+  @Post('test-login')
+  @ApiOperation({ summary: 'Test login with demo credentials' })
+  @ApiResponse({
+    status: 200,
+    description: 'Login test result',
+  })
+  async testLogin(@Body() body: { email?: string; password?: string }) {
+    const { email = 'demo@example.com', password = 'demo123' } = body;
+
+    try {
+      const result = await this.userService.login({ email, password });
+      return {
+        success: true,
+        message: 'Login successful',
+        user: result.user,
+        accessToken: result.accessToken,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: 'Login failed',
+        error: error.message,
+        credentials: {
+          email: 'demo@example.com',
+          password: 'demo123',
+        },
+      };
+    }
   }
 }

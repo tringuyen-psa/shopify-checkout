@@ -2,9 +2,19 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { UserSeederService } from './modules/users/user.seeder.service';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Create demo user on startup
+  const userSeeder = app.get(UserSeederService);
+  try {
+    await userSeeder.createDemoUser();
+    console.log('✅ Demo user created/verified: demo@example.com / demo123');
+  } catch (error) {
+    console.error('❌ Error creating demo user:', error);
+  }
 
   // Enable CORS - Allow all origins as requested
   app.enableCors({
