@@ -60,6 +60,24 @@ export default function Home() {
                             </div>
                         </div>
                         <div className="flex items-center space-x-3">
+                            {/* Auth Links */}
+                            <Button
+                                variant="outline"
+                                onClick={() => window.location.href = '/login'}
+                                className="flex items-center space-x-2"
+                            >
+                                <LogIn className="h-4 w-4" />
+                                <span className="hidden sm:inline">Sign In</span>
+                            </Button>
+
+                            <Button
+                                onClick={() => window.location.href = '/register'}
+                                className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white"
+                            >
+                                <User className="h-4 w-4" />
+                                <span className="hidden sm:inline">Sign Up</span>
+                            </Button>
+
                             {/* Customer Links */}
                             <Button
                                 variant="outline"

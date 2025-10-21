@@ -967,6 +967,16 @@ function CheckoutPage() {
     }
   };
 
+  // Check authentication
+  useEffect(() => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      // Redirect to login with return URL
+      const returnUrl = encodeURIComponent(window.location.pathname + window.location.search);
+      window.location.href = `/login?return=${returnUrl}`;
+    }
+  }, []);
+
   if (!packageId) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
