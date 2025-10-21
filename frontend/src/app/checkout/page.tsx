@@ -10,7 +10,7 @@ import { Select } from '@/components/ui/Select';
 import { BillingCycle } from '@/types/package';
 import { PaymentMethod } from '@/types/purchase';
 import { formatCurrency, validateEmail, validateRequired } from '@/lib/utils';
-import { ArrowLeft, CreditCard, Shield, Truck, Check, X } from 'lucide-react';
+import { ArrowLeft, Shield, Truck, Check, CreditCard, User, MapPin, Wallet, X } from 'lucide-react';
 import { StripePaymentService } from '@/lib/stripe';
 import { PurchaseService } from '@/lib/purchase';
 import { loadStripe } from '@stripe/stripe-js';
@@ -65,26 +65,223 @@ const countryOptions = [
   { value: 'KE', label: '🇰🇪 Kenya' },
 ];
 
-// Custom Card Element styles
-const cardElementOptions = {
-  style: {
-    base: {
-      fontSize: '16px',
-      color: '#424770',
-      '::placeholder': {
-        color: '#aab7c4',
-      },
-      iconColor: '#666EE8',
-    },
-    invalid: {
-      color: '#9e2146',
-    },
-  },
-  hidePostalCode: false,
-};
+type CheckoutStep = 'information' | 'shipping' | 'payment';
 
-// CheckoutForm Component with Stripe Elements
-function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onInputChange, onValidationError, mode, purchaseId, extendDays }: {
+interface StepIndicatorProps {
+  currentStep: CheckoutStep;
+  completedSteps: CheckoutStep[];
+}
+
+function StepIndicator({ currentStep, completedSteps }: StepIndicatorProps) {
+  const steps = [
+    { id: 'information', label: 'INFORMATION', icon: User },
+    { id: 'shipping', label: 'SHIPPING', icon: MapPin },
+    { id: 'payment', label: 'PAYMENT', icon: Wallet },
+  ] as const;
+
+  return (
+    <div className="flex items-center justify-between mb-8">
+      {steps.map((step, index) => {
+        const Icon = step.icon;
+        const isActive = currentStep === step.id;
+        const isCompleted = completedSteps.includes(step.id as CheckoutStep);
+        const isUpcoming = !isActive && !isCompleted;
+
+        return (
+          <div key={step.id} className="flex items-center flex-1">
+            <div className="flex items-center">
+              <div
+                className={`
+                  flex items-center justify-center w-10 h-10 rounded-full border-2 transition-all duration-300
+                  ${isActive
+                    ? 'border-blue-600 bg-blue-600 text-white'
+                    : isCompleted
+                    ? 'border-green-600 bg-green-600 text-white'
+                    : 'border-gray-300 bg-white text-gray-400'
+                  }
+                `}
+              >
+                {isCompleted ? (
+                  <Check className="w-5 h-5" />
+                ) : (
+                  <Icon className="w-5 h-5" />
+                )}
+              </div>
+              <div className="ml-3">
+                <div
+                  className={`
+                    text-sm font-medium transition-colors duration-300
+                    ${isActive
+                      ? 'text-blue-600'
+                      : isCompleted
+                      ? 'text-green-600'
+                      : 'text-gray-400'
+                    }
+                  `}
+                >
+                  {step.label}
+                </div>
+              </div>
+            </div>
+            {index < steps.length - 1 && (
+              <div
+                className={`
+                  flex-1 h-0.5 mx-4 transition-colors duration-300
+                  ${isCompleted ? 'bg-green-600' : 'bg-gray-300'}
+                `}
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// Information Step Component
+function InformationStep({ formData, errors, onInputChange, onValidationError }: {
+  formData: any;
+  errors: any;
+  onInputChange: (field: string, value: string) => void;
+  onValidationError: (errors: Record<string, string>) => void;
+}) {
+  const validateInformation = () => {
+    const newErrors: Record<string, string> = {};
+
+    // Required field validation
+    const requiredValidation = validateRequired(formData);
+    if (!requiredValidation.isValid) {
+      requiredValidation.missing.forEach(field => {
+        if (['customerName', 'customerEmail'].includes(field)) {
+          newErrors[field] = `${field.charAt(0).toUpperCase() + field.slice(1).replace(/([A-Z])/g, ' $1')} is required`;
+        }
+      });
+    }
+
+    // Email validation
+    if (formData.customerEmail && !validateEmail(formData.customerEmail)) {
+      newErrors.customerEmail = 'Please enter a valid email address';
+    }
+
+    onValidationError(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-xl font-semibold mb-4">Contact Information</h3>
+        <div className="space-y-4">
+          <Input
+            label="Full Name"
+            value={formData.customerName}
+            onChange={(e) => onInputChange('customerName', e.target.value)}
+            error={errors.customerName}
+            placeholder="John Doe"
+            required
+          />
+          <Input
+            label="Email Address"
+            type="email"
+            value={formData.customerEmail}
+            onChange={(e) => onInputChange('customerEmail', e.target.value)}
+            error={errors.customerEmail}
+            placeholder="john@example.com"
+            required
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Shipping Step Component
+function ShippingStep({ formData, errors, onInputChange, onValidationError }: {
+  formData: any;
+  errors: any;
+  onInputChange: (field: string, value: string) => void;
+  onValidationError: (errors: Record<string, string>) => void;
+}) {
+  const validateShipping = () => {
+    const newErrors: Record<string, string> = {};
+
+    // Required field validation
+    const requiredValidation = validateRequired(formData);
+    if (!requiredValidation.isValid) {
+      requiredValidation.missing.forEach(field => {
+        if (['address', 'city', 'country', 'zipCode'].includes(field)) {
+          newErrors[field] = `${field.charAt(0).toUpperCase() + field.slice(1).replace(/([A-Z])/g, ' $1')} is required`;
+        }
+      });
+    }
+
+    // Zip code validation (basic)
+    if (formData.zipCode && formData.zipCode.length < 5) {
+      newErrors.zipCode = 'Please enter a valid zip code';
+    }
+
+    onValidationError(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-xl font-semibold mb-4">Shipping Address</h3>
+        <div className="space-y-4">
+          <Input
+            label="Street Address"
+            value={formData.address}
+            onChange={(e) => onInputChange('address', e.target.value)}
+            error={errors.address}
+            placeholder="123 Main St"
+            required
+          />
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="City"
+              value={formData.city}
+              onChange={(e) => onInputChange('city', e.target.value)}
+              error={errors.city}
+              placeholder="New York"
+              required
+            />
+            <Input
+              label="ZIP Code"
+              value={formData.zipCode}
+              onChange={(e) => onInputChange('zipCode', e.target.value)}
+              error={errors.zipCode}
+              placeholder="10001"
+              required
+            />
+          </div>
+          <Select
+            value={formData.country}
+            onChange={(e) => onInputChange('country', e.target.value)}
+            options={countryOptions}
+            label="Country"
+            error={errors.country}
+            required
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Payment Step Component
+function PaymentStep({
+  pkg,
+  selectedCycle,
+  paymentMethod,
+  formData,
+  errors,
+  onInputChange,
+  onValidationError,
+  mode,
+  purchaseId,
+  extendDays
+}: {
   pkg: any;
   selectedCycle: BillingCycle;
   paymentMethod: PaymentMethod;
@@ -103,11 +300,6 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
   const [existingPurchaseId, setExistingPurchaseId] = useState<string | null>(purchaseId || null);
   const [checkoutSessionId, setCheckoutSessionId] = useState<string | null>(null);
 
-  // Debug popup state changes
-  useEffect(() => {
-    console.log('=== showPopup state changed ===', showPopup);
-  }, [showPopup]);
-
   const getPrice = () => {
     switch (selectedCycle) {
       case BillingCycle.WEEKLY:
@@ -121,25 +313,11 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
     }
   };
 
-  const validateForm = () => {
+  const validatePayment = () => {
     const newErrors: Record<string, string> = {};
 
-    // Required field validation
-    const requiredValidation = validateRequired(formData);
-    if (!requiredValidation.isValid) {
-      requiredValidation.missing.forEach(field => {
-        newErrors[field] = `${field.charAt(0).toUpperCase() + field.slice(1)} is required`;
-      });
-    }
-
-    // Email validation
-    if (formData.customerEmail && !validateEmail(formData.customerEmail)) {
-      newErrors.customerEmail = 'Please enter a valid email address';
-    }
-
-    // Zip code validation (basic)
-    if (formData.zipCode && formData.zipCode.length < 5) {
-      newErrors.zipCode = 'Please enter a valid zip code';
+    if (paymentMethod === PaymentMethod.STRIPE_CARD && (!stripe || !elements)) {
+      newErrors.stripe = 'Stripe has not loaded yet. Please try again.';
     }
 
     onValidationError(newErrors);
@@ -149,13 +327,7 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!validateForm()) {
-      return;
-    }
-
-    // For card payment, check if Stripe is loaded
-    if (paymentMethod === PaymentMethod.STRIPE_CARD && (!stripe || !elements)) {
-      onValidationError({ stripe: 'Stripe has not loaded yet. Please try again.' });
+    if (!validatePayment()) {
       return;
     }
 
@@ -165,15 +337,11 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
       let purchase;
 
       if (existingPurchaseId && (mode === 'renew' || mode === 'extend' || mode === 'purchase-again')) {
-        // For renew/extend/purchase-again, use existing purchase
-        console.log('Using existing purchase:', existingPurchaseId, 'mode:', mode);
         purchase = { id: existingPurchaseId };
-
         if (paymentMethod === PaymentMethod.STRIPE_POPUP) {
           setExistingPurchaseId(existingPurchaseId);
         }
       } else {
-        // Step 1: Create new purchase record first
         const purchaseData = {
           packageId: pkg.id,
           userId: formData.userId,
@@ -193,33 +361,25 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
           },
         };
 
-        console.log('Creating purchase:', purchaseData);
         purchase = await PurchaseService.createPurchase(purchaseData);
 
-        // Save purchase ID for later use in popup confirmation
         if (paymentMethod === PaymentMethod.STRIPE_POPUP) {
           setExistingPurchaseId(purchase.id);
         }
       }
 
-      // Step 2: Process payment based on selected method
       const price = getPrice();
-      // Use production URL for success/cancel redirects, fallback to current origin
       const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://shopify-checkout-frontend.vercel.app' || window.location.origin;
-      console.log('Base URL for redirects:', baseUrl);
 
       if (paymentMethod === PaymentMethod.STRIPE_CARD) {
-        // Create Payment Intent
         const paymentIntent = await StripePaymentService.createPaymentIntent({
           amount: price,
           currency: 'usd',
           customerEmail: formData.customerEmail,
         });
 
-        // Update purchase with payment intent metadata
         await PurchaseService.completePurchase(purchase.id, paymentIntent.id);
 
-        // Get card data from custom inputs
         const cardNumberInput = document.getElementById('cardNumber') as HTMLInputElement;
         const expiryInput = document.getElementById('cardExpiry') as HTMLInputElement;
         const cvcInput = document.getElementById('cardCvc') as HTMLInputElement;
@@ -228,15 +388,10 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
         const expiry = expiryInput?.value || '';
         const cvc = cvcInput?.value || '';
 
-        console.log('Custom card data:', { cardNumber, expiry, cvc });
-
-        // For now, use a test token since we're using custom inputs
-        // In production, you'd need to properly integrate with Stripe's tokenization
-        const { error: paymentMethodError, paymentMethod } = await stripe!.createPaymentMethod({
+        const { error: paymentMethodError, paymentMethod: stripePaymentMethod } = await stripe!.createPaymentMethod({
           type: 'card',
           card: {
-            token: 'tok_visa', // Test token for Visa
-            // Alternative: Use stripe.createToken with manual card data
+            token: 'tok_visa',
           },
           billing_details: {
             name: formData.customerName,
@@ -244,7 +399,7 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
             address: {
               line1: formData.address,
               city: formData.city,
-              country: formData.country, // Use selected country code
+              country: formData.country,
               postal_code: formData.zipCode,
             },
           },
@@ -254,42 +409,24 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
           throw new Error(paymentMethodError.message);
         }
 
-        // Confirm payment with the created payment method
         const { error, paymentIntent: confirmedIntent } = await stripe!.confirmCardPayment(paymentIntent.client_secret, {
-          payment_method: paymentMethod.id,
+          payment_method: stripePaymentMethod.id,
         });
 
         if (error) {
           throw new Error(error.message);
         }
 
-        // Check if payment was successful
-        if (confirmedIntent?.status === 'succeeded') {
-          // Payment successful - redirect to my-purchases
-          console.log('Payment successful, redirecting to /my-purchases');
-          window.location.href = `${baseUrl}/my-purchases?session_id=${confirmedIntent.id}`;
-          return;
-        } else if (confirmedIntent?.status === 'processing') {
-          // Payment is processing - show message and redirect
-          console.log('Payment is processing, redirecting to /my-purchases');
+        if (confirmedIntent?.status === 'succeeded' || confirmedIntent?.status === 'processing') {
           window.location.href = `${baseUrl}/my-purchases?session_id=${confirmedIntent.id}`;
           return;
         } else {
-          // Payment requires additional action
-          console.log('Payment requires additional action:', confirmedIntent?.status);
           throw new Error(`Payment status: ${confirmedIntent?.status || 'unknown'}. Please contact support.`);
         }
 
       } else if (paymentMethod === PaymentMethod.STRIPE_POPUP) {
-        // Show popup confirmation first
-        console.log('=== STRIPE_POPUP selected ===');
-        console.log('Setting showPopup to true for STRIPE_POPUP');
         setShowPopup(true);
-        console.log('showPopup should be true now');
-        console.log('Current popup state:', showPopup);
-
       } else {
-        // PayPal flow (placeholder)
         alert(`PayPal payment for ${formatCurrency(price)} - Coming soon!`);
         setIsProcessing(false);
         return;
@@ -300,7 +437,6 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
       alert(`Payment failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsProcessing(false);
-      // Don't reset popup state here - let popup handle its own closing
       if (paymentMethod !== PaymentMethod.STRIPE_POPUP) {
         setShowPopup(false);
       }
@@ -308,14 +444,7 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
   };
 
   const handlePopupConfirm = async () => {
-    console.log('=== handlePopupConfirm called ===');
-    console.log('existingPurchaseId:', existingPurchaseId);
-    console.log('mode:', mode);
-    console.log('pkg:', pkg);
-    console.log('formData:', formData);
-
     if (!existingPurchaseId) {
-      console.log('No existingPurchaseId, returning');
       setShowPopup(false);
       setIsProcessing(false);
       return;
@@ -323,9 +452,7 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
 
     try {
       const price = getPrice();
-      // Use production URL for success/cancel redirects, fallback to current origin
       const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://shopify-checkout-frontend.vercel.app' || window.location.origin;
-      console.log('Base URL for redirects:', baseUrl);
 
       const sessionData = {
         packageName: pkg.name,
@@ -335,74 +462,17 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
         cancelUrl: `${baseUrl}/payment/cancel`,
       };
 
-      // Add mode-specific metadata
-      if (mode) {
-        console.log('Adding mode metadata:', { mode, originalPurchaseId: existingPurchaseId, extendDays });
-        // Note: Backend will need to handle these metadata fields for webhook processing
-      }
-
-      console.log('Creating checkout session with data:', sessionData);
-
-      // Create Checkout Session
       const checkoutSession = await StripePaymentService.createCheckoutSession(sessionData);
-
-      console.log('Checkout session created:', checkoutSession);
 
       if (!checkoutSession || !checkoutSession.checkoutUrl) {
         throw new Error('Invalid checkout session response');
       }
 
-      // Update purchase with session metadata (webhook will handle final update)
-      console.log('Updating purchase with session ID:', checkoutSession.sessionId);
       await PurchaseService.completePurchase(existingPurchaseId, checkoutSession.sessionId);
-
-      // Save checkout session ID for tracking
       setCheckoutSessionId(checkoutSession.sessionId);
 
-      console.log('About to open popup with URL:', checkoutSession.checkoutUrl);
-
-      // For testing: Always redirect instead of popup to bypass popup blockers
-      console.log('Redirecting to Stripe (bypassing popup)...');
       window.location.href = checkoutSession.checkoutUrl;
       return;
-
-      // Original popup code (commented out for testing)
-      /*
-      // Try to open popup first
-      let popup = window.open(
-        checkoutSession.checkoutUrl,
-        'stripe-checkout',
-        'width=500,height=600,scrollbars=yes,resizable=yes'
-      );
-
-      console.log('Popup opened:', popup);
-
-      // Check if popup was blocked
-      if (!popup || popup.closed || typeof popup.closed === 'undefined') {
-        console.log('Popup blocked or failed, redirecting to Stripe checkout in same tab...');
-        // Fallback: Redirect to Stripe checkout in same tab
-        window.location.href = checkoutSession.checkoutUrl;
-        return;
-      }
-
-      // Poll to check if popup is closed
-      const checkClosed = setInterval(() => {
-        if (popup!.closed) {
-          clearInterval(checkClosed);
-          setShowPopup(false);
-          setIsProcessing(false);
-
-          // Show notification to user
-          alert('Thank you for your purchase! You will receive a confirmation email shortly. If you completed the payment, your purchase will be processed automatically.');
-
-          // Here you can add additional logic like redirecting to a success page
-          // The webhook will handle the purchase completion
-        }
-      }, 1000);
-
-      // Close confirmation popup
-      setShowPopup(false);
-      */
 
     } catch (error) {
       console.error('Error creating checkout session:', error);
@@ -419,74 +489,11 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
 
   return (
     <div className="space-y-6">
-      {/* Contact Information */}
-      <div className="space-y-4">
-        <h3 className="font-medium text-lg">Contact Information</h3>
-        <Input
-          label="Full Name"
-          value={formData.customerName}
-          onChange={(e) => onInputChange('customerName', e.target.value)}
-          error={errors.customerName}
-          placeholder="John Doe"
-          required
-        />
-        <Input
-          label="Email Address"
-          type="email"
-          value={formData.customerEmail}
-          onChange={(e) => onInputChange('customerEmail', e.target.value)}
-          error={errors.customerEmail}
-          placeholder="john@example.com"
-          required
-        />
-      </div>
-
-      {/* Shipping Information */}
-      <div className="space-y-4">
-        <h3 className="font-medium text-lg">Billing Information</h3>
-        <Input
-          label="Street Address"
-          value={formData.address}
-          onChange={(e) => onInputChange('address', e.target.value)}
-          error={errors.address}
-          placeholder="123 Main St"
-          required
-        />
-        <div className="grid grid-cols-2 gap-4">
-          <Input
-            label="City"
-            value={formData.city}
-            onChange={(e) => onInputChange('city', e.target.value)}
-            error={errors.city}
-            placeholder="New York"
-            required
-          />
-          <Input
-            label="ZIP Code"
-            value={formData.zipCode}
-            onChange={(e) => onInputChange('zipCode', e.target.value)}
-            error={errors.zipCode}
-            placeholder="10001"
-            required
-          />
-        </div>
-        <Select
-          value={formData.country}
-          onChange={(e) => onInputChange('country', e.target.value)}
-          options={countryOptions}
-          label="Country"
-          error={errors.country}
-          required
-        />
-      </div>
-
-      {/* Payment Method */}
-      <div className="space-y-4">
-        <h3 className="font-medium text-lg">Payment Method</h3>
+      <div>
+        <h3 className="text-xl font-semibold mb-4">Payment Method</h3>
         <Select
           value={paymentMethod}
           onChange={(e) => {
-            // This will be handled by parent component
             const event = new CustomEvent('paymentMethodChange', {
               detail: e.target.value as PaymentMethod
             });
@@ -498,9 +505,7 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
 
         {paymentMethod === PaymentMethod.STRIPE_CARD && (
           <div className="mt-6">
-            {/* Enhanced Credit Card Form Section */}
             <div className="bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 rounded-2xl overflow-hidden shadow-2xl border border-purple-700/30">
-              {/* Credit Card Header */}
               <div className="bg-black/20 backdrop-blur-sm p-6 border-b border-white/10">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-4">
@@ -519,9 +524,7 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
                 </div>
               </div>
 
-              {/* Credit Card Form Content */}
               <div className="p-6 space-y-6">
-                {/* Enhanced Card Number Section */}
                 <div className="space-y-3">
                   <label className="text-white font-semibold text-sm uppercase tracking-wide flex items-center gap-2">
                     <div className="w-1 h-4 bg-gradient-to-b from-purple-400 to-pink-400 rounded-full"></div>
@@ -552,10 +555,9 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
                           letterSpacing: '0.15em',
                         }}
                         onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                          let value = e.target.value.replace(/\s/g, ''); // Remove all spaces
+                          let value = e.target.value.replace(/\s/g, '');
                           let formattedValue = '';
 
-                          // Format: add space every 4 digits
                           for (let i = 0; i < value.length; i++) {
                             if (i > 0 && i % 4 === 0) {
                               formattedValue += ' ';
@@ -563,47 +565,20 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
                             formattedValue += value[i];
                           }
 
-                          // Limit to 19 characters (16 digits + 3 spaces)
                           formattedValue = formattedValue.slice(0, 19);
-
-                          // Update input value
                           e.target.value = formattedValue;
-
-                          // Store formatted value for Stripe (without spaces)
                           e.target.dataset.cardNumber = value;
                         }}
-                        onInput={(e: React.FormEvent<HTMLInputElement>) => {
-                          const target = e.target as HTMLInputElement;
-                          let value = target.value.replace(/\s/g, ''); // Remove all spaces
-                          let formattedValue = '';
-
-                          // Format: add space every 4 digits
-                          for (let i = 0; i < value.length; i++) {
-                            if (i > 0 && i % 4 === 0) {
-                              formattedValue += ' ';
-                            }
-                            formattedValue += value[i];
-                          }
-
-                          // Limit to 19 characters (16 digits + 3 spaces)
-                          formattedValue = formattedValue.slice(0, 19);
-
-                          // Update input value
-                          target.value = formattedValue;
-                        }}
-                        maxLength={19} // 16 digits + 3 spaces
+                        maxLength={19}
                       />
-                      {/* Hidden Stripe Element for validation */}
                       <div style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', height: 0 }}>
                         <CardNumberElement
                           options={{
                             style: { base: { fontSize: '1px' } },
                           }}
                           onChange={(e: any) => {
-                            // Update custom input when Stripe element changes
                             const customInput = document.getElementById('cardNumber') as HTMLInputElement;
                             if (e.value && customInput) {
-                              // Format Stripe's value to match our custom format
                               const cleanValue = e.value.replace(/\s/g, '');
                               let formattedValue = '';
                               for (let i = 0; i < cleanValue.length; i++) {
@@ -619,40 +594,9 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
                       </div>
                     </div>
                   </div>
-
-                  {/* Enhanced Card Brand Icons */}
-                  <div className="flex items-center justify-between mt-4">
-                    <span className="text-purple-200 text-xs font-medium">We accept:</span>
-                    <div className="flex items-center space-x-3">
-                      {/* Visa */}
-                      <div className="flex items-center space-x-1 px-2 py-1 bg-white/10 rounded-lg backdrop-blur-sm">
-                        <svg className="w-8 h-5" viewBox="0 0 32 20" fill="none">
-                          <rect width="32" height="20" rx="2" fill="#1A1F71"/>
-                          <text x="6" y="13" fill="white" fontSize="8" fontWeight="bold">VISA</text>
-                        </svg>
-                      </div>
-                      {/* Mastercard */}
-                      <div className="flex items-center space-x-1 px-2 py-1 bg-white/10 rounded-lg backdrop-blur-sm">
-                        <svg className="w-8 h-5" viewBox="0 0 32 20" fill="none">
-                          <rect width="32" height="20" rx="2" fill="#EB001B"/>
-                          <circle cx="11" cy="10" r="5" fill="#F79E1B"/>
-                          <circle cx="21" cy="10" r="5" fill="#EB001B"/>
-                        </svg>
-                      </div>
-                      {/* Amex */}
-                      <div className="flex items-center space-x-1 px-2 py-1 bg-white/10 rounded-lg backdrop-blur-sm">
-                        <svg className="w-8 h-5" viewBox="0 0 32 20" fill="none">
-                          <rect width="32" height="20" rx="2" fill="#006FCF"/>
-                          <text x="4" y="13" fill="white" fontSize="6" fontWeight="bold">AMEX</text>
-                        </svg>
-                      </div>
-                    </div>
-                  </div>
                 </div>
 
-                {/* Enhanced Expiration Date and Security Code */}
                 <div className="grid grid-cols-2 gap-4">
-                  {/* Expiration Date */}
                   <div className="space-y-3">
                     <label className="text-white font-semibold text-sm uppercase tracking-wide flex items-center gap-2">
                       <div className="w-1 h-4 bg-gradient-to-b from-purple-400 to-pink-400 rounded-full"></div>
@@ -669,15 +613,13 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
                           letterSpacing: '0.1em',
                         }}
                         onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                          let value = e.target.value.replace(/\D/g, ''); // Remove non-digits
+                          let value = e.target.value.replace(/\D/g, '');
 
                           if (value.length >= 2) {
                             value = value.slice(0, 2) + ' / ' + value.slice(2, 4);
                           }
 
-                          // Limit to MM / YY format
                           value = value.slice(0, 7);
-
                           e.target.value = value;
                         }}
                         maxLength={7}
@@ -685,7 +627,6 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
                     </div>
                   </div>
 
-                  {/* Security Code */}
                   <div className="space-y-3">
                     <label className="text-white font-semibold text-sm uppercase tracking-wide flex items-center gap-2">
                       <div className="w-1 h-4 bg-gradient-to-b from-purple-400 to-pink-400 rounded-full"></div>
@@ -716,7 +657,6 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
                             letterSpacing: '0.1em',
                           }}
                           onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                            // Only allow numbers, max 4 digits
                             let value = e.target.value.replace(/\D/g, '').slice(0, 4);
                             e.target.value = value;
                           }}
@@ -728,7 +668,6 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
                   </div>
                 </div>
 
-                {/* Enhanced Security Information */}
                 <div className="bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-400/30 rounded-xl p-4 backdrop-blur-sm">
                   <div className="flex items-start space-x-3">
                     <div className="p-2 bg-green-500/20 rounded-lg">
@@ -743,41 +682,6 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
                   </div>
                 </div>
 
-                {/* Enhanced Billing Details Summary */}
-                <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-4">
-                  <h5 className="font-semibold text-white mb-3 flex items-center gap-2">
-                    <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></div>
-                    Billing Information
-                  </h5>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between items-center py-2 border-b border-white/5">
-                      <span className="text-purple-200">Name:</span>
-                      <span className="text-white font-medium">{formData.customerName || 'Not provided'}</span>
-                    </div>
-                    <div className="flex justify-between items-center py-2 border-b border-white/5">
-                      <span className="text-purple-200">Email:</span>
-                      <span className="text-white font-medium truncate ml-2">{formData.customerEmail || 'Not provided'}</span>
-                    </div>
-                    <div className="flex justify-between items-center py-2">
-                      <span className="text-purple-200">Address:</span>
-                      <span className="text-white font-medium text-right ml-2">
-                        {formData.address && formData.city && formData.country
-                          ? `${formData.address}, ${formData.city}, ${countryOptions.find(c => c.value === formData.country)?.label || formData.country}`
-                          : 'Not provided'
-                        }
-                      </span>
-                    </div>
-                  </div>
-                  {(!formData.customerName || !formData.customerEmail || !formData.address) && (
-                    <div className="mt-3 p-3 bg-yellow-500/20 border border-yellow-400/30 rounded-lg">
-                      <p className="text-xs text-yellow-200">
-                        ⚠️ Please complete all contact and billing information above before proceeding.
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Enhanced Amount Summary */}
                 <div className="border-t border-white/20 pt-4">
                   <div className="flex justify-between items-center mb-4">
                     <div>
@@ -787,14 +691,12 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
                     <span className="text-3xl font-bold text-white">{formatCurrency(getPrice() * 0.98)}</span>
                   </div>
 
-                  {/* Enhanced Complete Purchase Button */}
                   <Button
                     type="button"
                     className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold py-4 px-6 rounded-xl shadow-lg hover:shadow-purple-500/25 transition-all duration-300 border-2 border-purple-500/50"
                     size="lg"
                     loading={isProcessing}
                     onClick={handleSubmit}
-                    disabled={!formData.customerName || !formData.customerEmail || !formData.address}
                   >
                     <div className="flex items-center justify-center space-x-2">
                       <Shield className="h-5 w-5" />
@@ -837,7 +739,6 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
         )}
       </div>
 
-      {/* Submit Button - Only show for non-card payment methods */}
       {paymentMethod !== PaymentMethod.STRIPE_CARD && (
         <div className="border-t pt-6">
           <Button
@@ -856,10 +757,8 @@ function CheckoutForm({ pkg, selectedCycle, paymentMethod, formData, errors, onI
         </div>
       )}
 
-          {/* Popup Modal for STRIPE_POPUP confirmation */}
       {showPopup && (
         <>
-          {console.log('=== POPUP RENDERING ===', { showPopup, existingPurchaseId })}
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
             <div className="flex items-center justify-between mb-4">
@@ -918,7 +817,7 @@ function CheckoutPage() {
   const packageId = searchParams.get('packageId');
   const billingCycle = searchParams.get('billingCycle') as BillingCycle;
   const purchaseId = searchParams.get('purchaseId');
-  const mode = searchParams.get('mode'); // renew, extend, purchase-again
+  const mode = searchParams.get('mode');
   const preFilledName = searchParams.get('name');
   const preFilledEmail = searchParams.get('email');
   const extendDays = searchParams.get('days');
@@ -927,6 +826,8 @@ function CheckoutPage() {
 
   const [selectedCycle, setSelectedCycle] = useState<BillingCycle>(billingCycle || BillingCycle.MONTHLY);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.STRIPE_CARD);
+  const [currentStep, setCurrentStep] = useState<CheckoutStep>('information');
+  const [completedSteps, setCompletedSteps] = useState<CheckoutStep[]>([]);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -934,7 +835,7 @@ function CheckoutPage() {
     customerEmail: preFilledEmail || '',
     address: '',
     city: '',
-    country: 'VN', // Default to Vietnam (country code)
+    country: 'VN',
     zipCode: '',
     userId: 'sample-user-123',
   });
@@ -946,7 +847,6 @@ function CheckoutPage() {
       setSelectedCycle(billingCycle);
     }
 
-    // Listen for payment method changes from child component
     const handlePaymentMethodChange = (event: CustomEvent) => {
       setPaymentMethod(event.detail);
     };
@@ -960,7 +860,6 @@ function CheckoutPage() {
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-    // Clear error for this field
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: '' }));
     }
@@ -968,6 +867,37 @@ function CheckoutPage() {
 
   const handleValidationError = (newErrors: Record<string, string>) => {
     setErrors(newErrors);
+  };
+
+  const handleNextStep = () => {
+    const newCompletedSteps = [...completedSteps, currentStep];
+    setCompletedSteps(newCompletedSteps);
+
+    if (currentStep === 'information') {
+      setCurrentStep('shipping');
+    } else if (currentStep === 'shipping') {
+      setCurrentStep('payment');
+    }
+  };
+
+  const handlePreviousStep = () => {
+    if (currentStep === 'shipping') {
+      setCurrentStep('information');
+      setCompletedSteps(completedSteps.filter(step => step !== 'shipping'));
+    } else if (currentStep === 'payment') {
+      setCurrentStep('shipping');
+      setCompletedSteps(completedSteps.filter(step => step !== 'payment'));
+    }
+  };
+
+  const handleStepClick = (step: CheckoutStep) => {
+    if (completedSteps.includes(step) || currentStep === step) {
+      setCurrentStep(step);
+      // Keep completed steps that come before the selected step
+      const stepOrder: CheckoutStep[] = ['information', 'shipping', 'payment'];
+      const stepIndex = stepOrder.indexOf(step);
+      setCompletedSteps(stepOrder.slice(0, stepIndex));
+    }
   };
 
   const getPrice = () => {
@@ -981,6 +911,59 @@ function CheckoutPage() {
         return pkg.yearlyPrice;
       default:
         return pkg.monthlyPrice;
+    }
+  };
+
+  const renderCurrentStep = () => {
+    switch (currentStep) {
+      case 'information':
+        return (
+          <InformationStep
+            formData={formData}
+            errors={errors}
+            onInputChange={handleInputChange}
+            onValidationError={handleValidationError}
+          />
+        );
+      case 'shipping':
+        return (
+          <ShippingStep
+            formData={formData}
+            errors={errors}
+            onInputChange={handleInputChange}
+            onValidationError={handleValidationError}
+          />
+        );
+      case 'payment':
+        return (
+          <PaymentStep
+            pkg={pkg}
+            selectedCycle={selectedCycle}
+            paymentMethod={paymentMethod}
+            formData={formData}
+            errors={errors}
+            onInputChange={handleInputChange}
+            onValidationError={handleValidationError}
+            mode={mode || undefined}
+            purchaseId={purchaseId || undefined}
+            extendDays={extendDays || undefined}
+          />
+        );
+      default:
+        return null;
+    }
+  };
+
+  const canProceedToNextStep = () => {
+    switch (currentStep) {
+      case 'information':
+        return formData.customerName && formData.customerEmail && validateEmail(formData.customerEmail);
+      case 'shipping':
+        return formData.address && formData.city && formData.country && formData.zipCode;
+      case 'payment':
+        return true; // Payment step handles its own validation
+      default:
+        return false;
     }
   };
 
@@ -1147,41 +1130,53 @@ function CheckoutPage() {
             </Card>
           </div>
 
-          {/* Right Column - Checkout Form */}
+          {/* Right Column - Multi-step Form */}
           <div>
             <Card>
               <CardHeader>
-                <CardTitle>Customer Information</CardTitle>
+                <CardTitle className="cursor-pointer" onClick={() => handleStepClick('information')}>
+                  {currentStep === 'information' ? 'Customer Information' :
+                   currentStep === 'shipping' ? 'Shipping Information' :
+                   'Payment Information'}
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                {paymentMethod === PaymentMethod.STRIPE_CARD ? (
-                  <Elements stripe={stripePromise}>
-                    <CheckoutForm
-                      pkg={pkg}
-                      selectedCycle={selectedCycle}
-                      paymentMethod={paymentMethod}
-                      formData={formData}
-                      errors={errors}
-                      onInputChange={handleInputChange}
-                      onValidationError={handleValidationError}
-                      mode={mode || undefined}
-                      purchaseId={purchaseId || undefined}
-                      extendDays={extendDays || undefined}
-                    />
-                  </Elements>
-                ) : (
-                  <CheckoutForm
-                    pkg={pkg}
-                    selectedCycle={selectedCycle}
-                    paymentMethod={paymentMethod}
-                    formData={formData}
-                    errors={errors}
-                    onInputChange={handleInputChange}
-                    onValidationError={handleValidationError}
-                    mode={mode || undefined}
-                    purchaseId={purchaseId || undefined}
-                    extendDays={extendDays || undefined}
-                  />
+                <div
+                  className="cursor-pointer"
+                  onClick={() => handleStepClick('information')}
+                >
+                  <StepIndicator currentStep={currentStep} completedSteps={completedSteps} />
+                </div>
+
+                <div className="mt-6">
+                  {paymentMethod === PaymentMethod.STRIPE_CARD && currentStep === 'payment' ? (
+                    <Elements stripe={stripePromise}>
+                      {renderCurrentStep()}
+                    </Elements>
+                  ) : (
+                    renderCurrentStep()
+                  )}
+                </div>
+
+                {/* Navigation Buttons */}
+                {currentStep !== 'payment' && (
+                  <div className="flex justify-between mt-8">
+                    <Button
+                      variant="outline"
+                      onClick={handlePreviousStep}
+                      disabled={currentStep === 'information'}
+                    >
+                      <ArrowLeft className="h-4 w-4 mr-2" />
+                      Previous
+                    </Button>
+                    <Button
+                      onClick={handleNextStep}
+                      disabled={!canProceedToNextStep()}
+                    >
+                      {currentStep === 'information' ? 'Continue to Shipping' : 'Continue to Payment'}
+                      <ArrowLeft className="h-4 w-4 ml-2 rotate-180" />
+                    </Button>
+                  </div>
                 )}
               </CardContent>
             </Card>
